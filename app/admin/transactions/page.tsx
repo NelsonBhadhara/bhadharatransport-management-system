@@ -139,27 +139,25 @@ export default function TransactionsPage() {
     setComputed(false)
   }
 
-  const autoCalculateExpenses = (currentLoads: Load[]) => {
-    const total = currentLoads.reduce((s, l) => s + l.numberOfLoads, 0)
-    const riverSandLoads = currentLoads.filter(l => l.loadType === 'riversand').reduce((s, l) => s + l.numberOfLoads, 0)
-    setExpenses(prev => ({
-      ...prev,
-      // Auto-check workers fee if at least one load
-      workersFee: total > 0 ? total * defaultExpenses.workersFeePerLoad : 0,
-      // Auto-add riversand fee if any riversand loads
-      riversandFee: riverSandLoads > 0 ? riverSandLoads * defaultExpenses.riversandFeePerLoad : 0,
-    }))
-  }
-
   const handleCompute = () => {
-    autoCalculateExpenses(loads)
-    const result = computeRecord(loads, expenses)
+    const total = loads.reduce((s, l) => s + l.numberOfLoads, 0)
+    const riverSandLoads = loads.filter(l => l.loadType === 'riversand').reduce((s, l) => s + l.numberOfLoads, 0)
+    const updatedExpenses = {
+      ...expenses,
+      workersFee: total > 0 ? total * defaultExpenses.workersFeePerLoad : 0,
+      riversandFee: riverSandLoads > 0 ? riverSandLoads * defaultExpenses.riversandFeePerLoad : 0,
+    }
+    const result = computeRecord(loads, updatedExpenses)
     setComputedResult(result)
+    setExpenses(updatedExpenses)
     setComputed(true)
   }
 
   const handleSave = () => {
-    if (!computed) { alert('Please compute the record first.'); return }
+    if (!computed) { 
+      alert('Please compute the record first.')
+      return 
+    }
     const user = store.getCurrentUser()
     const record: DailyRecord = {
       id: editingRecord?.id ?? Math.random().toString(36).slice(2),
@@ -173,6 +171,7 @@ export default function TransactionsPage() {
     store.saveRecord(record)
     setRecords(store.getRecords())
     setSaved(true)
+    // Clear form after successful save
     setTimeout(() => {
       setSaved(false)
       setShowForm(false)
@@ -180,12 +179,46 @@ export default function TransactionsPage() {
       setLoads([newLoad(trucks)])
       setExpenses(newExpense())
       setComputed(false)
-    }, 1500)
+    }, 1200)
   }
 
   const handleSaveAndCompute = () => {
     handleCompute()
-    setTimeout(() => handleSave(), 100)
+    // Give a tiny delay for state updates, then save
+    setTimeout(() => {
+      const total = loads.reduce((s, l) => s + l.numberOfLoads, 0)
+      const riverSandLoads = loads.filter(l => l.loadType === 'riversand').reduce((s, l) => s + l.numberOfLoads, 0)
+      const updatedExpenses = {
+        ...expenses,
+        workersFee: total > 0 ? total * defaultExpenses.workersFeePerLoad : 0,
+        riversandFee: riverSandLoads > 0 ? riverSandLoads * defaultExpenses.riversandFeePerLoad : 0,
+      }
+      const result = computeRecord(loads, updatedExpenses)
+      const user = store.getCurrentUser()
+      const record: DailyRecord = {
+        id: editingRecord?.id ?? Math.random().toString(36).slice(2),
+        date: selectedDate,
+        loads,
+        expenses: updatedExpenses,
+        ...result,
+        savedAt: new Date().toISOString(),
+        savedBy: user?.username ?? 'admin',
+      }
+      store.saveRecord(record)
+      setRecords(store.getRecords())
+      setSaved(true)
+      setComputed(true)
+      setComputedResult(result)
+      // Clear form after save
+      setTimeout(() => {
+        setSaved(false)
+        setShowForm(false)
+        setEditingRecord(null)
+        setLoads([newLoad(trucks)])
+        setExpenses(newExpense())
+        setComputed(false)
+      }, 1200)
+    }, 50)
   }
 
   const handleNewRecord = () => {
