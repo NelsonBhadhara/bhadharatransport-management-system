@@ -6,7 +6,7 @@ import {
   Printer, FileText, CalendarDays, CheckCircle, XCircle, Edit3, Settings
 } from 'lucide-react'
 import {
-  store, Load, DailyRecord, Expense, LoadType, LOAD_RATES, LOAD_LABELS,
+  store, Load, DailyRecord, Expense, LoadType, LOAD_LABELS,
   WORKERS_FEE_PER_LOAD, RIVERSAND_FEE_PER_LOAD, computeRecord, DefaultExpenses, LoadPrices
 } from '@/lib/store'
 import { format, parseISO } from 'date-fns'
@@ -79,12 +79,12 @@ export default function TransactionsPage() {
   const dateRecord = records.find(r => r.date === selectedDate)
 
   const updateLoad = (idx: number, updates: Partial<Load>) => {
-    setLoads(prev => prev.map((l, i) => {
+    const updatedLoads = loads.map((l, i) => {
       if (i !== idx) return l
       const updated = { ...l, ...updates }
       if (updates.loadType) {
         updated.loadTypeLabel = LOAD_LABELS[updates.loadType as LoadType]
-        updated.ratePerLoad = LOAD_RATES[updates.loadType as LoadType]
+        updated.ratePerLoad = loadPrices[updates.loadType as LoadType]
       }
       // auto-set truck plate from driver
       if (updates.driverName) {
@@ -92,18 +92,48 @@ export default function TransactionsPage() {
         updated.truckPlate = truck?.plate ?? ''
       }
       return updated
+    })
+    setLoads(updatedLoads)
+    // Auto-calculate expenses whenever any load is updated
+    const total = updatedLoads.reduce((s, l) => s + l.numberOfLoads, 0)
+    const riverSandLoads = updatedLoads.filter(l => l.loadType === 'riversand').reduce((s, l) => s + l.numberOfLoads, 0)
+    setExpenses(prev => ({
+      ...prev,
+      // Workers fee is per load - auto-added whenever loads exist
+      workersFee: total > 0 ? total * defaultExpenses.workersFeePerLoad : 0,
+      // Riversand fee only for riversand loads
+      riversandFee: riverSandLoads > 0 ? riverSandLoads * defaultExpenses.riversandFeePerLoad : 0,
     }))
+    setComputed(false)
     setComputed(false)
   }
 
   const addLoad = () => {
     const last = loads[loads.length - 1]
-    setLoads(prev => [...prev, { ...newLoad(), driverName: last?.driverName ?? 'Gombe' }])
+    const newLoads = [...loads, { ...newLoad(), driverName: last?.driverName ?? 'Gombe' }]
+    setLoads(newLoads)
+    // Auto-calculate expenses when a new load is added
+    const total = newLoads.reduce((s, l) => s + l.numberOfLoads, 0)
+    const riverSandLoads = newLoads.filter(l => l.loadType === 'riversand').reduce((s, l) => s + l.numberOfLoads, 0)
+    setExpenses(prev => ({
+      ...prev,
+      workersFee: total > 0 ? total * defaultExpenses.workersFeePerLoad : 0,
+      riversandFee: riverSandLoads > 0 ? riverSandLoads * defaultExpenses.riversandFeePerLoad : 0,
+    }))
     setComputed(false)
   }
 
   const removeLoad = (idx: number) => {
-    setLoads(prev => prev.filter((_, i) => i !== idx))
+    const newLoads = loads.filter((_, i) => i !== idx)
+    setLoads(newLoads)
+    // Recalculate expenses after removing a load
+    const total = newLoads.reduce((s, l) => s + l.numberOfLoads, 0)
+    const riverSandLoads = newLoads.filter(l => l.loadType === 'riversand').reduce((s, l) => s + l.numberOfLoads, 0)
+    setExpenses(prev => ({
+      ...prev,
+      workersFee: total > 0 ? total * defaultExpenses.workersFeePerLoad : 0,
+      riversandFee: riverSandLoads > 0 ? riverSandLoads * defaultExpenses.riversandFeePerLoad : 0,
+    }))
     setComputed(false)
   }
 
