@@ -73,7 +73,6 @@ export default function LoginModal({ onClose, onSignup }: { onClose: () => void;
                 </div>
                 <div className="text-left">
                   <p className="font-bold text-foreground">Administration Portal</p>
-                  <p className="text-sm text-muted-foreground">Full system access — transactions, fleet, employees</p>
                 </div>
               </button>
               <button
@@ -85,7 +84,6 @@ export default function LoginModal({ onClose, onSignup }: { onClose: () => void;
                 </div>
                 <div className="text-left">
                   <p className="font-bold text-foreground">Client Portal</p>
-                  <p className="text-sm text-muted-foreground">Book loads, view history, inquire & request quotes</p>
                 </div>
               </button>
               <div className="pt-2 text-center">

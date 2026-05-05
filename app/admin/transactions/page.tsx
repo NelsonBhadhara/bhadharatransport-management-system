@@ -15,7 +15,9 @@ import { v4 as uuid } from 'crypto'
 const DRIVERS = ['Gombe', 'Tanya', 'Tinashe', 'Fidza']
 const PAID_PRESETS = [80, 90, 100]
 
-function newLoad(): Load {
+function newLoad(trucks: any[] = []): Load {
+  const defaultDriver = 'Gombe'
+  const truck = trucks.find(t => t.driverName === defaultDriver)
   return {
     id: Math.random().toString(36).slice(2),
     loadType: 'riversand',
@@ -23,8 +25,8 @@ function newLoad(): Load {
     ratePerLoad: 90,
     numberOfLoads: 1,
     customerName: '',
-    driverName: 'Gombe',
-    truckPlate: '',
+    driverName: defaultDriver,
+    truckPlate: truck?.plate ?? '',
     paymentStatus: 'unpaid',
     amountPaid: 0,
     notes: '',
@@ -39,7 +41,7 @@ export default function TransactionsPage() {
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [records, setRecords] = useState<DailyRecord[]>([])
   const [editingRecord, setEditingRecord] = useState<DailyRecord | null>(null)
-  const [loads, setLoads] = useState<Load[]>([newLoad()])
+  const [loads, setLoads] = useState<Load[]>([newLoad(store.getTrucks())])
   const [expenses, setExpenses] = useState<Expense>(newExpense())
   const [expenseChecks, setExpenseChecks] = useState({
     workersFee: false, riversandFee: false, tyres: false, welding: false, other: false
@@ -110,7 +112,7 @@ export default function TransactionsPage() {
 
   const addLoad = () => {
     const last = loads[loads.length - 1]
-    const newLoads = [...loads, { ...newLoad(), driverName: last?.driverName ?? 'Gombe' }]
+    const newLoads = [...loads, { ...newLoad(trucks), driverName: last?.driverName ?? 'Gombe' }]
     setLoads(newLoads)
     // Auto-calculate expenses when a new load is added
     const total = newLoads.reduce((s, l) => s + l.numberOfLoads, 0)
@@ -174,12 +176,16 @@ export default function TransactionsPage() {
     setTimeout(() => {
       setSaved(false)
       setShowForm(false)
-      setLoads([newLoad()])
-      setExpenses(newExpense())
-      setExpenseChecks({ workersFee: false, riversandFee: false, tyres: false, welding: false, other: false })
-      setComputed(false)
       setEditingRecord(null)
     }, 1500)
+  }
+
+  const handleNewRecord = () => {
+    setShowForm(!showForm)
+    setEditingRecord(null)
+    setLoads([newLoad(trucks)])
+    setExpenses(newExpense())
+    setComputed(false)
   }
 
   const handleEdit = (record: DailyRecord) => {
@@ -265,7 +271,7 @@ export default function TransactionsPage() {
             <Settings className="w-4 h-4" />
           </button>
           <button
-            onClick={() => { setShowForm(!showForm); setEditingRecord(null); setLoads([newLoad()]); setExpenses(newExpense()); setComputed(false) }}
+            onClick={() => handleNewRecord()}
             className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity"
           >
             <Plus className="w-4 h-4" />
