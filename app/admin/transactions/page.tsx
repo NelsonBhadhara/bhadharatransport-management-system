@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import {
   store, Load, DailyRecord, Expense, LoadType, LOAD_RATES, LOAD_LABELS,
-  WORKERS_FEE_PER_LOAD, RIVERSAND_FEE_PER_LOAD, computeRecord, DefaultExpenses
+  WORKERS_FEE_PER_LOAD, RIVERSAND_FEE_PER_LOAD, computeRecord, DefaultExpenses, LoadPrices
 } from '@/lib/store'
 import { format, parseISO } from 'date-fns'
 import { v4 as uuid } from 'crypto'
@@ -53,6 +53,8 @@ export default function TransactionsPage() {
   const [saved, setSaved] = useState(false)
   const [defaultExpenses, setDefaultExpenses] = useState<DefaultExpenses>(store.getDefaultExpenses())
   const [editingExpenses, setEditingExpenses] = useState(false)
+  const [loadPrices, setLoadPrices] = useState<LoadPrices>(store.getLoadPrices())
+  const [editingPrices, setEditingPrices] = useState(false)
 
   useEffect(() => {
     setRecords(store.getRecords())
@@ -260,48 +262,86 @@ export default function TransactionsPage() {
 
       {/* ── Expense Settings Modal ─────────────────────────────────────────── */}
       {editingExpenses && (
-        <div className="bg-card border border-border rounded-2xl p-6 mb-8 space-y-4">
+        <div className="bg-card border border-border rounded-2xl p-6 mb-8 space-y-6">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-foreground">Default Expense Rates</h2>
+            <h2 className="text-lg font-bold text-foreground">Settings</h2>
             <button onClick={() => setEditingExpenses(false)} className="text-muted-foreground hover:text-foreground">
               ✕
             </button>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Workers Fee Per Load ($)</label>
-              <input
-                type="number"
-                min={0}
-                step={0.5}
-                value={defaultExpenses.workersFeePerLoad}
-                onChange={e => setDefaultExpenses(prev => ({ ...prev, workersFeePerLoad: Number(e.target.value) }))}
-                className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-              />
+
+          {/* Default Expense Rates */}
+          <div className="space-y-4">
+            <h3 className="font-semibold text-foreground">Default Expense Rates</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Workers Fee Per Load ($)</label>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  value={defaultExpenses.workersFeePerLoad}
+                  onChange={e => setDefaultExpenses(prev => ({ ...prev, workersFeePerLoad: Number(e.target.value) }))}
+                  className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Riversand Fee Per Load ($)</label>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  value={defaultExpenses.riversandFeePerLoad}
+                  onChange={e => setDefaultExpenses(prev => ({ ...prev, riversandFeePerLoad: Number(e.target.value) }))}
+                  className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
+              </div>
             </div>
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Riversand Fee Per Load ($)</label>
-              <input
-                type="number"
-                min={0}
-                step={0.5}
-                value={defaultExpenses.riversandFeePerLoad}
-                onChange={e => setDefaultExpenses(prev => ({ ...prev, riversandFeePerLoad: Number(e.target.value) }))}
-                className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-              />
-            </div>
+            <button
+              onClick={() => {
+                store.saveDefaultExpenses(defaultExpenses)
+                setSaved(true)
+                setTimeout(() => setSaved(false), 1500)
+              }}
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity"
+            >
+              Save Expense Rates
+            </button>
           </div>
-          <button
-            onClick={() => {
-              store.saveDefaultExpenses(defaultExpenses)
-              setSaved(true)
-              setTimeout(() => setSaved(false), 1500)
-              setEditingExpenses(false)
-            }}
-            className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity"
-          >
-            Save New Rates
-          </button>
+
+          {/* Load Prices */}
+          <div className="space-y-4 border-t border-border pt-6">
+            <h3 className="font-semibold text-foreground">Load Prices</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {(
+                ['riversand', 'pitsand', 'quarrystone', 'gravel'] as (keyof LoadPrices)[]
+              ).map(type => (
+                <div key={type}>
+                  <label className="text-xs text-muted-foreground mb-1 block capitalize">
+                    {type === 'riversand' ? 'River Sand' : type === 'pitsand' ? 'Pit Sand' : type === 'quarrystone' ? 'Quarry Stone' : 'Gravel'} Price Per Load ($)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    value={loadPrices[type]}
+                    onChange={e => setLoadPrices(prev => ({ ...prev, [type]: Number(e.target.value) }))}
+                    className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  />
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => {
+                store.saveLoadPrices(loadPrices)
+                setSaved(true)
+                setTimeout(() => setSaved(false), 1500)
+              }}
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity"
+            >
+              Save Load Prices
+            </button>
+          </div>
         </div>
       )}
 
@@ -386,9 +426,10 @@ export default function TransactionsPage() {
                         onChange={e => updateLoad(idx, { loadType: e.target.value as LoadType })}
                         className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
                       >
-                        <option value="riversand">River Sand — $90/load</option>
-                        <option value="pitsand">Pit Sand — $85/load</option>
-                        <option value="quarrystone">Quarry Stone — $85/load</option>
+                        <option value="riversand">River Sand — ${loadPrices.riversand}/load</option>
+                        <option value="pitsand">Pit Sand — ${loadPrices.pitsand}/load</option>
+                        <option value="quarrystone">Quarry Stone — ${loadPrices.quarrystone}/load</option>
+                        <option value="gravel">Gravel — ${loadPrices.gravel}/load</option>
                         <option value="other">Other (custom rate)</option>
                       </select>
                     </div>

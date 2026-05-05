@@ -63,7 +63,7 @@ export default function WelcomePage() {
         <div className="relative z-10 flex-1 flex flex-col items-center justify-center text-center px-6 py-20">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-primary/30 bg-primary/10 text-primary text-xs font-semibold mb-6 tracking-wider uppercase">
             <Truck className="w-3 h-3" />
-            Professional Haulage Services — Zimbabwe
+            Professional Haulage Services — Masvingo, Zimbabwe
           </div>
           <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold text-balance text-foreground mb-6 leading-tight">
             Moving Zimbabwe&apos;s
@@ -102,10 +102,8 @@ export default function WelcomePage() {
 
       {/* ── Stats Bar ────────────────────────────────────────────────────── */}
       <section className="bg-card border-y border-border">
-        <div className="max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-4 divide-x divide-border">
+        <div className="max-w-5xl mx-auto grid grid-cols-2 divide-x divide-border">
           {[
-            { label: 'Trucks in Fleet', value: '7' },
-            { label: 'Active Drivers', value: '4' },
             { label: 'Years in Service', value: '5+' },
             { label: 'Loads Delivered', value: '10K+' },
           ].map(stat => (
@@ -121,27 +119,29 @@ export default function WelcomePage() {
       <section className="py-20 px-6 md:px-12 max-w-6xl mx-auto">
         <h2 className="text-3xl font-bold text-center text-foreground mb-4">What We Carry</h2>
         <p className="text-center text-muted-foreground mb-12 max-w-lg mx-auto">
-          Fixed-rate bulk material haulage across Zimbabwe — transparent pricing, no surprises.
+          Fixed-rate bulk material haulage across Masvingo — reliable and professional service.
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           {[
             {
               name: 'River Sand',
-              rate: '$90/load',
               desc: 'Premium quality riversand for construction and building projects.',
               icon: '🪨',
             },
             {
               name: 'Pit Sand',
-              rate: '$85/load',
               desc: 'Fine pit sand ideal for plastering, rendering and masonry work.',
               icon: '⛏️',
             },
             {
               name: 'Quarry Stone',
-              rate: '$85/load',
               desc: 'Crushed quarry stone for foundations, roads and aggregate use.',
               icon: '🏗️',
+            },
+            {
+              name: 'Gravel',
+              desc: 'Quality gravel for driveways, landscaping and construction needs.',
+              icon: '🪨',
             },
           ].map(service => (
             <div
@@ -151,8 +151,7 @@ export default function WelcomePage() {
               <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center text-2xl mb-4">
                 {service.icon}
               </div>
-              <h3 className="text-lg font-bold text-foreground mb-1">{service.name}</h3>
-              <p className="text-primary font-bold text-xl mb-3">{service.rate}</p>
+              <h3 className="text-lg font-bold text-foreground mb-3">{service.name}</h3>
               <p className="text-sm text-muted-foreground leading-relaxed">{service.desc}</p>
             </div>
           ))}
@@ -207,31 +206,30 @@ export default function WelcomePage() {
             <div className="flex flex-col gap-3">
               {[
                 { num: '0773 083 687', whatsapp: true },
-                { num: '0774 049 526', whatsapp: true },
-                { num: '0770 083 687', whatsapp: true },
+                { num: '0774 049 526', whatsapp: false },
+                { num: '0770 083 687', whatsapp: false },
               ].map(c => (
                 <div key={c.num} className="flex items-center gap-3">
-                  <div className="flex gap-2">
+                  {c.whatsapp ? (
+                    <a
+                      href={`https://wa.me/263${c.num.replace(/^0/, '').replace(/\s/g, '')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 text-sm text-muted-foreground hover:text-green-400 transition-colors"
+                      title="WhatsApp"
+                    >
+                      <MessageCircle className="w-4 h-4 text-green-400" />
+                      {c.num}
+                    </a>
+                  ) : (
                     <a
                       href={`tel:${c.num.replace(/\s/g, '')}`}
-                      className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                      className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
                     >
                       <Phone className="w-4 h-4 text-primary" />
                       {c.num}
                     </a>
-                    {c.whatsapp && (
-                      <a
-                        href={`https://wa.me/263${c.num.replace(/^0/, '').replace(/\s/g, '')}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-xs text-green-400 hover:text-green-300 transition-colors"
-                        title="WhatsApp"
-                      >
-                        <MessageCircle className="w-3.5 h-3.5" />
-                        WA
-                      </a>
-                    )}
-                  </div>
+                  )}
                 </div>
               ))}
             </div>

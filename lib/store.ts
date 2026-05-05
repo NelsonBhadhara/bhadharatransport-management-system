@@ -4,7 +4,7 @@
 // Bhadhara Transport – In-Memory Store (localStorage-backed for demo)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type LoadType = 'riversand' | 'pitsand' | 'quarrystone' | 'other'
+export type LoadType = 'riversand' | 'pitsand' | 'quarrystone' | 'gravel' | 'other'
 export type PaymentStatus = 'paid' | 'unpaid'
 export type UserRole = 'admin' | 'client' | 'employee'
 
@@ -334,6 +334,22 @@ class BhadharaStore {
     exp[key] = value
     this.saveDefaultExpenses(exp)
   }
+
+  // ── Load Prices ────────────────────────────────────────────────────────────
+  getLoadPrices(): LoadPrices {
+    return loadFromStorage<LoadPrices>('bht_load_prices', LOAD_PRICES)
+  }
+
+  saveLoadPrices(prices: LoadPrices): void {
+    LOAD_PRICES = prices
+    saveToStorage('bht_load_prices', prices)
+  }
+
+  updateLoadPrice(loadType: LoadType, price: number): void {
+    const prices = this.getLoadPrices()
+    prices[loadType] = price
+    this.saveLoadPrices(prices)
+  }
 }
 
 export const store = new BhadharaStore()
@@ -343,6 +359,7 @@ export const LOAD_RATES: Record<LoadType, number> = {
   riversand: 90,
   pitsand: 85,
   quarrystone: 85,
+  gravel: 90,
   other: 0,
 }
 
@@ -350,6 +367,7 @@ export const LOAD_LABELS: Record<LoadType, string> = {
   riversand: 'River Sand',
   pitsand: 'Pit Sand',
   quarrystone: 'Quarry Stone',
+  gravel: 'Gravel',
   other: 'Other',
 }
 
@@ -358,9 +376,25 @@ export interface DefaultExpenses {
   riversandFeePerLoad: number
 }
 
+export interface LoadPrices {
+  riversand: number
+  pitsand: number
+  quarrystone: number
+  gravel: number
+  other: number
+}
+
 export let DEFAULT_EXPENSES: DefaultExpenses = {
   workersFeePerLoad: 20,
   riversandFeePerLoad: 5,
+}
+
+export let LOAD_PRICES: LoadPrices = {
+  riversand: 90,
+  pitsand: 85,
+  quarrystone: 85,
+  gravel: 90,
+  other: 0,
 }
 
 // For backward compatibility
