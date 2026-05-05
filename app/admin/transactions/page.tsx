@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import {
-  Plus, Save, Calculator, ChevronDown, ChevronUp, Trash2, Search,
+  Plus, Save, ChevronDown, ChevronUp, Trash2, Search,
   Printer, FileText, CalendarDays, CheckCircle, XCircle, Edit3, Settings
 } from 'lucide-react'
 import {
@@ -177,7 +177,15 @@ export default function TransactionsPage() {
       setSaved(false)
       setShowForm(false)
       setEditingRecord(null)
+      setLoads([newLoad(trucks)])
+      setExpenses(newExpense())
+      setComputed(false)
     }, 1500)
+  }
+
+  const handleSaveAndCompute = () => {
+    handleCompute()
+    setTimeout(() => handleSave(), 100)
   }
 
   const handleNewRecord = () => {
@@ -637,19 +645,11 @@ export default function TransactionsPage() {
           {/* Actions */}
           <div className="flex flex-wrap items-center gap-3">
             <button
-              onClick={handleCompute}
-              className="flex items-center gap-2 px-5 py-2.5 bg-accent text-accent-foreground rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity"
-            >
-              <Calculator className="w-4 h-4" />
-              Compute
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={!computed}
-              className="flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+              onClick={handleSaveAndCompute}
+              className="flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity"
             >
               <Save className="w-4 h-4" />
-              {saved ? 'Saved!' : 'Save Record'}
+              {saved ? 'Saved!' : 'Save & Compute'}
             </button>
             <button
               onClick={() => { setShowForm(false); setEditingRecord(null); setComputed(false) }}
