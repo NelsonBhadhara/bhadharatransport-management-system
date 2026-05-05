@@ -3,11 +3,11 @@
 import { useState, useEffect } from 'react'
 import {
   Plus, Save, Calculator, ChevronDown, ChevronUp, Trash2, Search,
-  Printer, FileText, CalendarDays, CheckCircle, XCircle, Edit3
+  Printer, FileText, CalendarDays, CheckCircle, XCircle, Edit3, Settings
 } from 'lucide-react'
 import {
   store, Load, DailyRecord, Expense, LoadType, LOAD_RATES, LOAD_LABELS,
-  WORKERS_FEE_PER_LOAD, RIVERSAND_FEE_PER_LOAD, computeRecord
+  WORKERS_FEE_PER_LOAD, RIVERSAND_FEE_PER_LOAD, computeRecord, DefaultExpenses
 } from '@/lib/store'
 import { format, parseISO } from 'date-fns'
 import { v4 as uuid } from 'crypto'
@@ -45,11 +45,14 @@ export default function TransactionsPage() {
     workersFee: false, riversandFee: false, tyres: false, welding: false, other: false
   })
   const [computed, setComputed] = useState(false)
-  const [computedResult, setComputedResult] = useState({ grossRevenue: 0, paidRevenue: 0, totalExpenses: 0, netRevenue: 0 })
+  const [computedResult, setComputedResult] = useState({ grossRevenue: 0, totalExpenses: 0, netRevenue: 0 })
   const [searchQuery, setSearchQuery] = useState('')
+  const [paymentFilter, setPaymentFilter] = useState<'all' | 'paid' | 'unpaid'>('all')
   const [showForm, setShowForm] = useState(false)
   const [trucks, setTrucks] = useState(store.getTrucks())
   const [saved, setSaved] = useState(false)
+  const [defaultExpenses, setDefaultExpenses] = useState<DefaultExpenses>(store.getDefaultExpenses())
+  const [editingExpenses, setEditingExpenses] = useState(false)
 
   useEffect(() => {
     setRecords(store.getRecords())
@@ -58,12 +61,16 @@ export default function TransactionsPage() {
 
   const filteredRecords = records
     .filter(r => {
-      if (!searchQuery) return true
-      return (
-        r.date.includes(searchQuery) ||
-        r.loads.some(l => l.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          l.driverName.toLowerCase().includes(searchQuery.toLowerCase()))
-      )
+      // Search filter
+      if (searchQuery && !r.date.includes(searchQuery) &&
+          !r.loads.some(l => l.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          l.driverName.toLowerCase().includes(searchQuery.toLowerCase()))) {
+        return false
+      }
+      // Payment status filter
+      if (paymentFilter === 'paid') return r.loads.some(l => l.paymentStatus === 'paid')
+      if (paymentFilter === 'unpaid') return r.loads.some(l => l.paymentStatus === 'unpaid')
+      return true
     })
     .sort((a, b) => b.date.localeCompare(a.date))
 
@@ -103,8 +110,10 @@ export default function TransactionsPage() {
     const riverSandLoads = currentLoads.filter(l => l.loadType === 'riversand').reduce((s, l) => s + l.numberOfLoads, 0)
     setExpenses(prev => ({
       ...prev,
-      workersFee: expenseChecks.workersFee ? total * WORKERS_FEE_PER_LOAD : prev.workersFee,
-      riversandFee: expenseChecks.riversandFee ? riverSandLoads * RIVERSAND_FEE_PER_LOAD : prev.riversandFee,
+      // Auto-check workers fee if at least one load
+      workersFee: total > 0 ? total * defaultExpenses.workersFeePerLoad : 0,
+      // Auto-add riversand fee if any riversand loads
+      riversandFee: riverSandLoads > 0 ? riverSandLoads * defaultExpenses.riversandFeePerLoad : 0,
     }))
   }
 
@@ -207,6 +216,22 @@ export default function TransactionsPage() {
               className="bg-input border border-border rounded-lg pl-10 pr-4 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 w-52"
             />
           </div>
+          <select
+            value={paymentFilter}
+            onChange={e => setPaymentFilter(e.target.value as typeof paymentFilter)}
+            className="bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+          >
+            <option value="all">All Transactions</option>
+            <option value="paid">Paid Only</option>
+            <option value="unpaid">Unpaid Only</option>
+          </select>
+          <button
+            onClick={() => setEditingExpenses(!editingExpenses)}
+            className="p-2 border border-border rounded-lg text-muted-foreground hover:text-primary hover:border-primary transition-colors"
+            title="Edit default expense rates"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
           <button
             onClick={() => { setShowForm(!showForm); setEditingRecord(null); setLoads([newLoad()]); setExpenses(newExpense()); setComputed(false) }}
             className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity"
@@ -232,6 +257,53 @@ export default function TransactionsPage() {
           </span>
         )}
       </div>
+
+      {/* ── Expense Settings Modal ─────────────────────────────────────────── */}
+      {editingExpenses && (
+        <div className="bg-card border border-border rounded-2xl p-6 mb-8 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-foreground">Default Expense Rates</h2>
+            <button onClick={() => setEditingExpenses(false)} className="text-muted-foreground hover:text-foreground">
+              ✕
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Workers Fee Per Load ($)</label>
+              <input
+                type="number"
+                min={0}
+                step={0.5}
+                value={defaultExpenses.workersFeePerLoad}
+                onChange={e => setDefaultExpenses(prev => ({ ...prev, workersFeePerLoad: Number(e.target.value) }))}
+                className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Riversand Fee Per Load ($)</label>
+              <input
+                type="number"
+                min={0}
+                step={0.5}
+                value={defaultExpenses.riversandFeePerLoad}
+                onChange={e => setDefaultExpenses(prev => ({ ...prev, riversandFeePerLoad: Number(e.target.value) }))}
+                className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              store.saveDefaultExpenses(defaultExpenses)
+              setSaved(true)
+              setTimeout(() => setSaved(false), 1500)
+              setEditingExpenses(false)
+            }}
+            className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity"
+          >
+            Save New Rates
+          </button>
+        </div>
+      )}
 
       {/* ── New / Edit Form ─────────────────────────────────────────────── */}
       {showForm && (
@@ -408,8 +480,8 @@ export default function TransactionsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
               {(
                 [
-                  { key: 'workersFee', label: 'Workers Fee', hint: `Auto: $${loads.reduce((s, l) => s + l.numberOfLoads, 0) * WORKERS_FEE_PER_LOAD} ($${WORKERS_FEE_PER_LOAD}/load)` },
-                  { key: 'riversandFee', label: 'Riversand Fee', hint: `Auto: $${loads.filter(l => l.loadType === 'riversand').reduce((s, l) => s + l.numberOfLoads, 0) * RIVERSAND_FEE_PER_LOAD} ($${RIVERSAND_FEE_PER_LOAD}/load)` },
+                  { key: 'workersFee', label: 'Workers Fee', hint: `Auto: $${loads.reduce((s, l) => s + l.numberOfLoads, 0) * defaultExpenses.workersFeePerLoad} ($${defaultExpenses.workersFeePerLoad}/load)` },
+                  { key: 'riversandFee', label: 'Riversand Fee', hint: `Auto: $${loads.filter(l => l.loadType === 'riversand').reduce((s, l) => s + l.numberOfLoads, 0) * defaultExpenses.riversandFeePerLoad} ($${defaultExpenses.riversandFeePerLoad}/load)` },
                   { key: 'tyres', label: 'Tyres', hint: '' },
                   { key: 'welding', label: 'Welding', hint: '' },
                   { key: 'other', label: 'Other', hint: '' },
@@ -445,14 +517,10 @@ export default function TransactionsPage() {
 
           {/* Computed result */}
           {computed && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 bg-secondary/30 rounded-xl border border-border">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-4 bg-secondary/30 rounded-xl border border-border">
               <div>
                 <p className="text-xs text-muted-foreground">Gross Revenue</p>
                 <p className="text-lg font-bold text-foreground">${computedResult.grossRevenue.toFixed(2)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Paid Revenue</p>
-                <p className="text-lg font-bold text-primary">${computedResult.paidRevenue.toFixed(2)}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Total Expenses</p>

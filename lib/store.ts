@@ -220,7 +220,7 @@ class BhadharaStore {
     return truck
   }
 
-  // ── Employees ─────────────────────────────────────────────────────────────
+  // ── Employees ─────────────────────────────────���───────────────────────────
   getEmployees(): Employee[] {
     return loadFromStorage<Employee[]>('bht_employees', DEFAULT_EMPLOYEES)
   }
@@ -318,6 +318,22 @@ class BhadharaStore {
     )
     saveToStorage('bht_bookings', bookings)
   }
+
+  // ── Default Expenses ───────────────────────────────────────────────────────
+  getDefaultExpenses(): DefaultExpenses {
+    return loadFromStorage<DefaultExpenses>('bht_default_expenses', DEFAULT_EXPENSES)
+  }
+
+  saveDefaultExpenses(expenses: DefaultExpenses): void {
+    DEFAULT_EXPENSES = expenses
+    saveToStorage('bht_default_expenses', expenses)
+  }
+
+  updateDefaultExpense(key: keyof DefaultExpenses, value: number): void {
+    const exp = this.getDefaultExpenses()
+    exp[key] = value
+    this.saveDefaultExpenses(exp)
+  }
 }
 
 export const store = new BhadharaStore()
@@ -337,16 +353,33 @@ export const LOAD_LABELS: Record<LoadType, string> = {
   other: 'Other',
 }
 
+export interface DefaultExpenses {
+  workersFeePerLoad: number
+  riversandFeePerLoad: number
+}
+
+export let DEFAULT_EXPENSES: DefaultExpenses = {
+  workersFeePerLoad: 20,
+  riversandFeePerLoad: 5,
+}
+
+// For backward compatibility
+export function getWorkersFeePer() {
+  return DEFAULT_EXPENSES.workersFeePerLoad
+}
+
+export function getRiversandFeePer() {
+  return DEFAULT_EXPENSES.riversandFeePerLoad
+}
+
 export const WORKERS_FEE_PER_LOAD = 20
 export const RIVERSAND_FEE_PER_LOAD = 5
 
 export function computeRecord(loads: Load[], expenses: Expense) {
   const grossRevenue = loads.reduce((sum, l) => sum + l.ratePerLoad * l.numberOfLoads, 0)
-  const paidRevenue = loads
-    .filter(l => l.paymentStatus === 'paid')
-    .reduce((sum, l) => sum + l.amountPaid, 0)
   const totalExpenses =
     expenses.workersFee + expenses.riversandFee + expenses.tyres + expenses.welding + expenses.other
-  const netRevenue = paidRevenue - totalExpenses
-  return { grossRevenue, paidRevenue, totalExpenses, netRevenue }
+  // Net revenue = gross revenue (all loads, paid + unpaid) - total expenses
+  const netRevenue = grossRevenue - totalExpenses
+  return { grossRevenue, totalExpenses, netRevenue }
 }
