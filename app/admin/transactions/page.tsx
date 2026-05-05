@@ -577,11 +577,11 @@ export default function TransactionsPage() {
                           }
                         }}
                         disabled={isWorkersFee || isRiversandFee}
-                        className={`accent-primary ${(isWorkersFee || isRiversandFee) ? 'cursor-not-allowed opacity-70' : ''}`}
+                        className={`accent-primary ${(isWorkersFee || isRiversandFee) ? 'cursor-not-allowed' : ''}`}
                       />
                       <span className={`${isChecked ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
                         {exp.label}
-                        {(isWorkersFee || isRiversandFee) && <span className="text-primary text-xs ml-1">(Auto)</span>}
+                        {(isWorkersFee || isRiversandFee) && shouldAutoCheck && <span className="text-primary text-xs ml-1">(Auto-locked)</span>}
                       </span>
                     </label>
                     {isChecked && (
@@ -597,7 +597,7 @@ export default function TransactionsPage() {
                           }}
                           disabled={isWorkersFee || isRiversandFee}
                           placeholder="Amount ($)"
-                          className={`w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 ${(isWorkersFee || isRiversandFee) ? 'opacity-70 cursor-not-allowed' : ''}`}
+                          className={`w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 ${(isWorkersFee || isRiversandFee) ? 'opacity-60 cursor-not-allowed' : ''}`}
                         />
                         {exp.hint && <p className="text-xs text-muted-foreground mt-0.5">{exp.hint}</p>}
                       </div>
