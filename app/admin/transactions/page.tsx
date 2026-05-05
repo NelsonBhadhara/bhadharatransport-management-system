@@ -551,38 +551,60 @@ export default function TransactionsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
               {(
                 [
-                  { key: 'workersFee', label: 'Workers Fee', hint: `Auto: $${loads.reduce((s, l) => s + l.numberOfLoads, 0) * defaultExpenses.workersFeePerLoad} ($${defaultExpenses.workersFeePerLoad}/load)` },
-                  { key: 'riversandFee', label: 'Riversand Fee', hint: `Auto: $${loads.filter(l => l.loadType === 'riversand').reduce((s, l) => s + l.numberOfLoads, 0) * defaultExpenses.riversandFeePerLoad} ($${defaultExpenses.riversandFeePerLoad}/load)` },
-                  { key: 'tyres', label: 'Tyres', hint: '' },
-                  { key: 'welding', label: 'Welding', hint: '' },
-                  { key: 'other', label: 'Other', hint: '' },
-                ] as { key: keyof Expense; label: string; hint: string }[]
-              ).map(exp => (
-                <div key={exp.key} className="flex flex-col gap-1">
-                  <label className="flex items-center gap-2 text-xs cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={expenseChecks[exp.key as keyof typeof expenseChecks]}
-                      onChange={e => setExpenseChecks(prev => ({ ...prev, [exp.key]: e.target.checked }))}
-                      className="accent-primary"
-                    />
-                    <span className="text-muted-foreground">{exp.label}</span>
-                  </label>
-                  {expenseChecks[exp.key as keyof typeof expenseChecks] && (
-                    <div>
+                  { key: 'workersFee', label: 'Workers Fee', hint: `Auto: $${loads.reduce((s, l) => s + l.numberOfLoads, 0) * defaultExpenses.workersFeePerLoad} ($${defaultExpenses.workersFeePerLoad}/load)`, auto: true },
+                  { key: 'riversandFee', label: 'Riversand Fee', hint: `Auto: $${loads.filter(l => l.loadType === 'riversand').reduce((s, l) => s + l.numberOfLoads, 0) * defaultExpenses.riversandFeePerLoad} ($${defaultExpenses.riversandFeePerLoad}/load)`, auto: true },
+                  { key: 'tyres', label: 'Tyres', hint: '', auto: false },
+                  { key: 'welding', label: 'Welding', hint: '', auto: false },
+                  { key: 'other', label: 'Other', hint: '', auto: false },
+                ] as { key: keyof Expense; label: string; hint: string; auto: boolean }[]
+              ).map(exp => {
+                const isWorkersFee = exp.key === 'workersFee'
+                const isRiversandFee = exp.key === 'riversandFee'
+                const totalLoads = loads.reduce((s, l) => s + l.numberOfLoads, 0)
+                const riverSandLoads = loads.filter(l => l.loadType === 'riversand').reduce((s, l) => s + l.numberOfLoads, 0)
+                const shouldAutoCheck = (isWorkersFee && totalLoads > 0) || (isRiversandFee && riverSandLoads > 0)
+                const isChecked = shouldAutoCheck || expenseChecks[exp.key as keyof typeof expenseChecks]
+                
+                return (
+                  <div key={exp.key} className="flex flex-col gap-1">
+                    <label className={`flex items-center gap-2 text-xs ${(isWorkersFee || isRiversandFee) ? '' : 'cursor-pointer'}`}>
                       <input
-                        type="number"
-                        min={0}
-                        value={expenses[exp.key]}
-                        onChange={e => setExpenses(prev => ({ ...prev, [exp.key]: Number(e.target.value) }))}
-                        placeholder="Amount ($)"
-                        className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={e => {
+                          if (!isWorkersFee && !isRiversandFee) {
+                            setExpenseChecks(prev => ({ ...prev, [exp.key]: e.target.checked }))
+                          }
+                        }}
+                        disabled={isWorkersFee || isRiversandFee}
+                        className={`accent-primary ${(isWorkersFee || isRiversandFee) ? 'cursor-not-allowed opacity-70' : ''}`}
                       />
-                      {exp.hint && <p className="text-xs text-muted-foreground mt-0.5">{exp.hint}</p>}
-                    </div>
-                  )}
-                </div>
-              ))}
+                      <span className={`${isChecked ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
+                        {exp.label}
+                        {(isWorkersFee || isRiversandFee) && <span className="text-primary text-xs ml-1">(Auto)</span>}
+                      </span>
+                    </label>
+                    {isChecked && (
+                      <div>
+                        <input
+                          type="number"
+                          min={0}
+                          value={expenses[exp.key]}
+                          onChange={e => {
+                            if (!isWorkersFee && !isRiversandFee) {
+                              setExpenses(prev => ({ ...prev, [exp.key]: Number(e.target.value) }))
+                            }
+                          }}
+                          disabled={isWorkersFee || isRiversandFee}
+                          placeholder="Amount ($)"
+                          className={`w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 ${(isWorkersFee || isRiversandFee) ? 'opacity-70 cursor-not-allowed' : ''}`}
+                        />
+                        {exp.hint && <p className="text-xs text-muted-foreground mt-0.5">{exp.hint}</p>}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </div>
 
