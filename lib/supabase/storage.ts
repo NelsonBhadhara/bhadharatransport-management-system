@@ -19,7 +19,7 @@ export async function uploadFile(
   file: File,
   userId: string,
   onProgress?: (progress: number) => void
-): Promise<{ success: boolean; path?: string; error?: string }> {
+): Promise<FileMetadata> {
   try {
     const supabase = createClient()
     const filePath = `${userId}/${Date.now()}-${file.name}`
@@ -32,12 +32,10 @@ export async function uploadFile(
         upsert: false,
       })
 
-    if (uploadError) {
-      return { success: false, error: uploadError.message }
-    }
+    if (uploadError) throw new Error(uploadError.message)
 
     // Create metadata record
-    const { error: metaError } = await supabase
+    const { data, error: metaError } = await supabase
       .from('file_metadata')
       .insert({
         user_id: userId,
@@ -46,23 +44,24 @@ export async function uploadFile(
         file_size: file.size,
         file_type: file.type,
       })
+      .select()
+      .single()
 
     if (metaError) {
       // Clean up the uploaded file if metadata creation fails
       await supabase.storage.from(BUCKET_NAME).remove([filePath])
-      return { success: false, error: metaError.message }
+      throw new Error(metaError.message)
     }
 
-    return { success: true, path: filePath }
+    if (!data) throw new Error('Failed to create file metadata')
+
+    return data as FileMetadata
   } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    }
+    throw error instanceof Error ? error : new Error('Upload failed')
   }
 }
 
-export async function getUserFiles(userId: string): Promise<FileMetadata[]> {
+export async function listFiles(userId: string): Promise<FileMetadata[]> {
   try {
     const supabase = createClient()
     const { data, error } = await supabase
@@ -72,17 +71,37 @@ export async function getUserFiles(userId: string): Promise<FileMetadata[]> {
       .order('created_at', { ascending: false })
 
     if (error) throw error
-    return data || []
+    return (data || []) as FileMetadata[]
   } catch (error) {
-    console.error('Error fetching files:', error)
-    return []
+    console.error('[v0] Error fetching files:', error)
+    throw error instanceof Error ? error : new Error('Failed to fetch files')
+  }
+}
+
+export async function downloadFile(
+  filePath: string,
+  userId: string
+): Promise<Blob> {
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase.storage
+      .from(BUCKET_NAME)
+      .download(filePath)
+
+    if (error) throw new Error(error.message)
+    if (!data) throw new Error('No data returned from download')
+
+    return data
+  } catch (error) {
+    throw error instanceof Error ? error : new Error('Download failed')
   }
 }
 
 export async function deleteFile(
+  fileId: string,
   filePath: string,
-  fileId: string
-): Promise<{ success: boolean; error?: string }> {
+  userId: string
+): Promise<void> {
   try {
     const supabase = createClient()
 
@@ -91,40 +110,34 @@ export async function deleteFile(
       .from(BUCKET_NAME)
       .remove([filePath])
 
-    if (storageError) {
-      return { success: false, error: storageError.message }
-    }
+    if (storageError) throw new Error(storageError.message)
 
     // Delete metadata record
     const { error: metaError } = await supabase
       .from('file_metadata')
       .delete()
       .eq('id', fileId)
+      .eq('user_id', userId)
 
-    if (metaError) {
-      return { success: false, error: metaError.message }
-    }
-
-    return { success: true }
+    if (metaError) throw new Error(metaError.message)
   } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    }
+    throw error instanceof Error ? error : new Error('Delete failed')
   }
 }
 
-export async function getDownloadUrl(filePath: string): Promise<string | null> {
+export async function getDownloadUrl(filePath: string): Promise<string> {
   try {
     const supabase = createClient()
-    const { data } = supabase.storage
+    const { data, error } = await supabase.storage
       .from(BUCKET_NAME)
-      .getPublicUrl(filePath)
+      .createSignedUrl(filePath, 3600) // 1 hour expiry
 
-    return data?.publicUrl || null
+    if (error) throw new Error(error.message)
+    if (!data?.signedUrl) throw new Error('Failed to create signed URL')
+
+    return data.signedUrl
   } catch (error) {
-    console.error('Error getting download URL:', error)
-    return null
+    throw error instanceof Error ? error : new Error('Failed to get download URL')
   }
 }
 
@@ -145,8 +158,12 @@ export function subscribeToFileChanges(
         filter: `user_id=eq.${userId}`,
       },
       async () => {
-        const files = await getUserFiles(userId)
-        onFileChange(files)
+        try {
+          const files = await listFiles(userId)
+          onFileChange(files)
+        } catch (error) {
+          console.error('[v0] Error syncing files:', error)
+        }
       }
     )
     .subscribe()
