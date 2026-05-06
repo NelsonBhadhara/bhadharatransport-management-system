@@ -1,235 +1,205 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Truck, DollarSign, ClipboardList, Users, TrendingUp, Bell, Calendar } from 'lucide-react'
-import { store, DailyRecord, Booking } from '@/lib/store'
+import { useAuth } from '@/components/auth/AuthProvider'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
 import { format } from 'date-fns'
-import Link from 'next/link'
+import { Truck as TruckIcon, Users, FileText, DollarSign, CalendarDays, Loader2 } from 'lucide-react'
+import * as db from '@/lib/supabase/database'
+import type { Truck, DailyRecord, Booking, Employee } from '@/lib/store'
 
-export default function AdminOverviewPage() {
+export default function AdminDashboard() {
+  const { profile } = useAuth()
+  const [trucks, setTrucks] = useState<Truck[]>([])
   const [records, setRecords] = useState<DailyRecord[]>([])
   const [bookings, setBookings] = useState<Booking[]>([])
-  const [trucks, setTrucks] = useState(store.getTrucks())
-  const [employees, setEmployees] = useState(store.getEmployees())
+  const [employees, setEmployees] = useState<Employee[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    setRecords(store.getRecords())
-    setBookings(store.getBookings())
-    setTrucks(store.getTrucks())
-    setEmployees(store.getEmployees())
+    const loadData = async () => {
+      const [t, r, b, e] = await Promise.all([
+        db.getTrucks(),
+        db.getRecords(),
+        db.getBookings(),
+        db.getEmployees(),
+      ])
+      setTrucks(t)
+      setRecords(r)
+      setBookings(b)
+      setEmployees(e)
+      setLoading(false)
+    }
+    loadData()
   }, [])
 
-  const today = format(new Date(), 'yyyy-MM-dd')
-  const todayRecord = records.find(r => r.date === today)
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-8 w-64" />
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-28" />)}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Skeleton className="h-64" />
+          <Skeleton className="h-64" />
+        </div>
+      </div>
+    )
+  }
+
+  const activeTrucks = trucks.filter(t => t.status === 'active').length
   const pendingBookings = bookings.filter(b => b.status === 'pending')
-  const thisMonthRecords = records.filter(r => r.date.startsWith(format(new Date(), 'yyyy-MM')))
-  const monthRevenue = thisMonthRecords.reduce((s, r) => s + r.netRevenue, 0)
-  const monthLoads = thisMonthRecords.reduce((s, r) => s + r.loads.length, 0)
-  const activeTrucks = trucks.filter(t => t.status === 'active' && t.driverName).length
+  const recentRecords = records.slice(0, 5)
+  const drivers = employees.filter(e => e.role === 'driver' && e.status === 'active')
+  const thisMonth = format(new Date(), 'yyyy-MM')
+  const monthRecords = records.filter(r => r.date.startsWith(thisMonth))
+  const monthRevenue = monthRecords.reduce((sum, r) => sum + r.grossRevenue, 0)
 
   const stats = [
-    {
-      label: "Today's Net Revenue",
-      value: todayRecord ? `$${todayRecord.netRevenue.toFixed(2)}` : '$0.00',
-      icon: DollarSign,
-      color: 'text-primary',
-      bg: 'bg-primary/10',
-    },
-    {
-      label: 'Monthly Revenue',
-      value: `$${monthRevenue.toFixed(2)}`,
-      icon: TrendingUp,
-      color: 'text-accent',
-      bg: 'bg-accent/10',
-    },
-    {
-      label: "Today's Loads",
-      value: todayRecord ? String(todayRecord.loads.length) : '0',
-      icon: ClipboardList,
-      color: 'text-green-400',
-      bg: 'bg-green-400/10',
-    },
-    {
-      label: 'Monthly Loads',
-      value: String(monthLoads),
-      icon: Truck,
-      color: 'text-blue-400',
-      bg: 'bg-blue-400/10',
-    },
-    {
-      label: 'Active Trucks',
-      value: `${activeTrucks}/7`,
-      icon: Truck,
-      color: 'text-yellow-400',
-      bg: 'bg-yellow-400/10',
-    },
-    {
-      label: 'Pending Bookings',
-      value: String(pendingBookings.length),
-      icon: Bell,
-      color: 'text-orange-400',
-      bg: 'bg-orange-400/10',
-    },
+    { label: 'Active Trucks', value: activeTrucks, icon: TruckIcon, color: 'text-blue-600' },
+    { label: 'Total Employees', value: employees.length, icon: Users, color: 'text-green-600' },
+    { label: 'Pending Bookings', value: pendingBookings.length, icon: FileText, color: 'text-amber-600' },
+    { label: 'Revenue (Month)', value: `$${monthRevenue}`, icon: DollarSign, color: 'text-emerald-600' },
   ]
 
   return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Dashboard Overview</h1>
-          <p className="text-sm text-muted-foreground mt-1">{format(new Date(), 'EEEE, d MMMM yyyy')}</p>
-        </div>
-        <Link
-          href="/admin/transactions"
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity"
-        >
-          <ClipboardList className="w-4 h-4" />
-          New Transaction
-        </Link>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold">Dashboard Overview</h1>
+        <p className="text-muted-foreground text-sm">{format(new Date(), 'EEEE, d MMMM yyyy')}</p>
       </div>
 
-      {/* Stats grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
-        {stats.map(stat => (
-          <div key={stat.label} className="bg-card border border-border rounded-xl p-5">
-            <div className="flex items-start justify-between mb-3">
-              <div className={`w-10 h-10 ${stat.bg} rounded-lg flex items-center justify-center`}>
-                <stat.icon className={`w-5 h-5 ${stat.color}`} />
-              </div>
-            </div>
-            <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>
-            <p className="text-xs text-muted-foreground mt-1">{stat.label}</p>
-          </div>
-        ))}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {stats.map((stat) => {
+          const Icon = stat.icon
+          return (
+            <Card key={stat.label}>
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-2xl font-bold">{stat.value}</p>
+                    <p className="text-sm text-muted-foreground">{stat.label}</p>
+                  </div>
+                  <Icon className={`h-8 w-8 ${stat.color} opacity-80`} />
+                </div>
+              </CardContent>
+            </Card>
+          )
+        })}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Pending Bookings */}
-        <div className="bg-card border border-border rounded-xl p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold text-foreground flex items-center gap-2">
-              <Bell className="w-4 h-4 text-primary" />
-              Pending Bookings
-            </h2>
-            <Link href="/admin/messages" className="text-xs text-primary hover:underline">View all</Link>
-          </div>
-          {pendingBookings.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">No pending bookings</p>
-          ) : (
-            <div className="space-y-2">
-              {pendingBookings.slice(0, 5).map(b => (
-                <div key={b.id} className="flex items-center justify-between p-3 bg-secondary/30 rounded-lg">
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">{b.clientName}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {b.loadTypeLabel} × {b.numberOfLoads} — {b.preferredDate}
-                    </p>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Pending Bookings</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {pendingBookings.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No pending bookings</p>
+            ) : (
+              <div className="space-y-3">
+                {pendingBookings.slice(0, 5).map((b) => (
+                  <div key={b.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                    <div>
+                      <p className="font-medium text-sm">{b.clientName || b.clientUsername}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {b.loadTypeLabel} × {b.numberOfLoads} — {b.preferredDate}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="text-amber-600 border-amber-300">Pending</Badge>
                   </div>
-                  <span className="px-2 py-0.5 text-xs bg-orange-400/10 text-orange-400 rounded-full border border-orange-400/20">
-                    Pending
-                  </span>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Recent Records */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Recent Daily Records</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {recentRecords.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No records yet — start recording transactions</p>
+            ) : (
+              <div className="space-y-3">
+                {recentRecords.map((r) => (
+                  <div key={r.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                    <div className="flex items-center gap-3">
+                      <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <p className="font-medium text-sm">
+                          {format(new Date(r.date + 'T12:00:00'), 'dd MMM yyyy')}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {r.loads.length} loads · Gross ${r.grossRevenue}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Driver Overview */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Driver Overview</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {drivers.map((driver) => {
+                const truck = trucks.find(t => t.driverName === driver.name)
+                const driverLoads = monthRecords.flatMap(r =>
+                  r.loads.filter(l => l.driverName === driver.name)
+                )
+                return (
+                  <div key={driver.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                    <div>
+                      <p className="font-medium text-sm">{driver.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {truck?.plate ?? 'Unassigned'}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-sm">{driverLoads.length}</p>
+                      <p className="text-xs text-muted-foreground">loads this month</p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Fleet Status */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Fleet Status</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {trucks.map((truck) => (
+                <div key={truck.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                  <div>
+                    <p className="font-medium text-sm">{truck.plate}</p>
+                    <p className="text-xs text-muted-foreground">{truck.driverName ?? 'Unassigned'}</p>
+                  </div>
+                  <Badge variant={truck.status === 'active' ? 'default' : 'secondary'}>
+                    {truck.status}
+                  </Badge>
                 </div>
               ))}
             </div>
-          )}
-        </div>
-
-        {/* Recent Records */}
-        <div className="bg-card border border-border rounded-xl p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold text-foreground flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-primary" />
-              Recent Daily Records
-            </h2>
-            <Link href="/admin/transactions" className="text-xs text-primary hover:underline">View all</Link>
-          </div>
-          {records.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">No records yet — start recording transactions</p>
-          ) : (
-            <div className="space-y-2">
-              {[...records]
-                .sort((a, b) => b.date.localeCompare(a.date))
-                .slice(0, 5)
-                .map(r => (
-                  <div key={r.id} className="flex items-center justify-between p-3 bg-secondary/30 rounded-lg">
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">{format(new Date(r.date + 'T12:00:00'), 'dd MMM yyyy')}</p>
-                      <p className="text-xs text-muted-foreground">{r.loads.length} loads · Gross ${r.grossRevenue}</p>
-                    </div>
-                    <span className={`text-sm font-bold ${r.netRevenue >= 0 ? 'text-green-400' : 'text-destructive'}`}>
-                      ${r.netRevenue.toFixed(2)}
-                    </span>
-                  </div>
-                ))}
-            </div>
-          )}
-        </div>
-
-        {/* Driver Overview */}
-        <div className="bg-card border border-border rounded-xl p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold text-foreground flex items-center gap-2">
-              <Users className="w-4 h-4 text-primary" />
-              Driver Overview
-            </h2>
-            <Link href="/admin/employees" className="text-xs text-primary hover:underline">Manage</Link>
-          </div>
-          <div className="space-y-2">
-            {employees.filter(e => e.role === 'driver').map(driver => {
-              const driverLoads = records.filter(r => r.date.startsWith(format(new Date(), 'yyyy-MM'))).flatMap(r => r.loads).filter(l => l.driverName === driver.name)
-              return (
-                <div key={driver.id} className="flex items-center justify-between p-3 bg-secondary/30 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center text-xs font-bold text-primary">
-                      {driver.name[0]}
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">{driver.name}</p>
-                      <p className="text-xs text-muted-foreground">{trucks.find(t => t.driverName === driver.name)?.plate ?? 'Unassigned'}</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-bold text-primary">{driverLoads.length}</p>
-                    <p className="text-xs text-muted-foreground">loads this month</p>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Fleet quick view */}
-        <div className="bg-card border border-border rounded-xl p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold text-foreground flex items-center gap-2">
-              <Truck className="w-4 h-4 text-primary" />
-              Fleet Status
-            </h2>
-            <Link href="/admin/garage" className="text-xs text-primary hover:underline">Manage</Link>
-          </div>
-          <div className="space-y-2">
-            {trucks.map(truck => (
-              <div key={truck.id} className="flex items-center justify-between p-3 bg-secondary/30 rounded-lg">
-                <div>
-                  <p className="text-sm font-semibold text-foreground font-mono">{truck.plate}</p>
-                  <p className="text-xs text-muted-foreground">{truck.driverName ?? 'Unassigned'}</p>
-                </div>
-                <span
-                  className={`px-2 py-0.5 text-xs rounded-full border ${
-                    truck.status === 'active'
-                      ? 'bg-green-400/10 text-green-400 border-green-400/20'
-                      : truck.status === 'maintenance'
-                      ? 'bg-yellow-400/10 text-yellow-400 border-yellow-400/20'
-                      : 'bg-muted text-muted-foreground border-border'
-                  }`}
-                >
-                  {truck.status}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

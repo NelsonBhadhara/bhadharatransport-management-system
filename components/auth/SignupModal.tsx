@@ -1,139 +1,204 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { X, Truck, Lock, User, Mail, Eye, EyeOff } from 'lucide-react'
-import { store } from '@/lib/store'
+import { useAuth } from '@/components/auth/AuthProvider'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Truck, Loader2, CheckCircle } from 'lucide-react'
 
-export default function SignupModal({ onClose, onLogin }: { onClose: () => void; onLogin: () => void }) {
-  const router = useRouter()
+interface SignupModalProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onSwitchToLogin?: () => void
+}
+
+export function SignupModal({ open, onOpenChange, onSwitchToLogin }: SignupModalProps) {
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [showPw, setShowPw] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [success, setSuccess] = useState(false)
+  const { signUp } = useAuth()
 
-  const handleSignup = () => {
+  const handleSignup = async (e: React.FormEvent) => {
+    e.preventDefault()
     setError('')
-    if (!username.trim()) { setError('Username is required.'); return }
-    if (username.length < 4) { setError('Username must be at least 4 characters.'); return }
-    if (!password) { setError('Password is required.'); return }
-    if (password.length < 6) { setError('Password must be at least 6 characters.'); return }
-    if (password !== confirmPassword) { setError('Passwords do not match.'); return }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.')
+      return
+    }
+
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters long.')
+      return
+    }
+
+    if (username.length < 3) {
+      setError('Username must be at least 3 characters long.')
+      return
+    }
 
     setLoading(true)
-    setTimeout(() => {
-      const result = store.addUser({
-        username,
-        passwordHash: password,
-        role: 'client',
-        email: email || undefined,
-        status: 'active',
-      })
-      if ('error' in result) {
+
+    try {
+      const result = await signUp(email, password, username)
+
+      if (result.error) {
         setError(result.error)
         setLoading(false)
         return
       }
-      store.login(username, password)
-      router.push('/client')
-    }, 400)
+
+      setSuccess(true)
+      setLoading(false)
+    } catch {
+      setError('An unexpected error occurred. Please try again.')
+      setLoading(false)
+    }
+  }
+
+  const resetForm = () => {
+    setUsername('')
+    setEmail('')
+    setPassword('')
+    setConfirmPassword('')
+    setError('')
+    setSuccess(false)
+    setLoading(false)
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
-      <div className="bg-card border border-border rounded-2xl w-full max-w-md shadow-2xl">
-        <div className="flex items-center justify-between p-6 border-b border-border">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-primary rounded-lg flex items-center justify-center">
-              <Truck className="w-5 h-5 text-primary-foreground" />
-            </div>
-            <div>
-              <p className="font-bold text-foreground text-sm">Create Account</p>
-              <p className="text-xs text-muted-foreground">Join Bhadhara Transport</p>
-            </div>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) resetForm()
+        onOpenChange(o)
+      }}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader className="text-center space-y-2">
+          <div className="flex items-center justify-center gap-2">
+            <Truck className="h-6 w-6 text-amber-600" />
+            <span className="text-lg font-bold tracking-tight">BHADHARA TRANSPORT</span>
           </div>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+          <DialogTitle>Create Account</DialogTitle>
+          <DialogDescription>
+            Join Bhadhara Transport as a client
+          </DialogDescription>
+        </DialogHeader>
 
-        <div className="p-6 space-y-4">
-          {error && (
-            <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-sm text-destructive">
-              {error}
-            </div>
-          )}
+        {success ? (
+          <div className="py-8 text-center space-y-4">
+            <CheckCircle className="h-12 w-12 text-green-500 mx-auto" />
+            <h3 className="text-lg font-semibold">Account Created!</h3>
+            <p className="text-sm text-muted-foreground">
+              Please check your email to confirm your account, then log in.
+            </p>
+            <Button
+              className="bg-amber-600 hover:bg-amber-700"
+              onClick={() => {
+                onOpenChange(false)
+                resetForm()
+                onSwitchToLogin?.()
+              }}
+            >
+              Go to Login
+            </Button>
+          </div>
+        ) : (
+          <form onSubmit={handleSignup} className="space-y-4 py-4">
+            {error && (
+              <div className="bg-destructive/10 text-destructive text-sm rounded-md p-3">
+                {error}
+              </div>
+            )}
 
-          <div className="space-y-3">
-            <div className="relative">
-              <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
+            <div className="space-y-2">
+              <Label htmlFor="signup-username">Username</Label>
+              <Input
+                id="signup-username"
                 type="text"
-                placeholder="Username *"
+                placeholder="Choose a username"
                 value={username}
-                onChange={e => setUsername(e.target.value)}
-                className="w-full bg-input border border-border rounded-lg pl-10 pr-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm"
+                onChange={(e) => setUsername(e.target.value)}
+                required
+                disabled={loading}
               />
             </div>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
+
+            <div className="space-y-2">
+              <Label htmlFor="signup-email">Email</Label>
+              <Input
+                id="signup-email"
                 type="email"
-                placeholder="Email (optional — for notifications)"
+                placeholder="you@example.com"
                 value={email}
-                onChange={e => setEmail(e.target.value)}
-                className="w-full bg-input border border-border rounded-lg pl-10 pr-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm"
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                disabled={loading}
               />
             </div>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
-                type={showPw ? 'text' : 'password'}
-                placeholder="Password *"
+
+            <div className="space-y-2">
+              <Label htmlFor="signup-password">Password</Label>
+              <Input
+                id="signup-password"
+                type="password"
+                placeholder="At least 6 characters"
                 value={password}
-                onChange={e => setPassword(e.target.value)}
-                className="w-full bg-input border border-border rounded-lg pl-10 pr-10 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm"
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                disabled={loading}
               />
-              <button onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
             </div>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
-                type={showPw ? 'text' : 'password'}
-                placeholder="Confirm password *"
+
+            <div className="space-y-2">
+              <Label htmlFor="signup-confirm">Confirm Password</Label>
+              <Input
+                id="signup-confirm"
+                type="password"
+                placeholder="Re-enter your password"
                 value={confirmPassword}
-                onChange={e => setConfirmPassword(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSignup()}
-                className="w-full bg-input border border-border rounded-lg pl-10 pr-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm"
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                disabled={loading}
               />
             </div>
-          </div>
 
-          <p className="text-xs text-muted-foreground">
-            By signing up you agree to our terms of service. Your username cannot be reused once taken.
-          </p>
+            <p className="text-xs text-muted-foreground">
+              By signing up you agree to our terms of service. Your account will be created as a client.
+            </p>
 
-          <button
-            onClick={handleSignup}
-            disabled={loading}
-            className="w-full py-3 bg-primary text-primary-foreground rounded-lg font-bold hover:opacity-90 transition-opacity disabled:opacity-50"
-          >
-            {loading ? 'Creating Account...' : 'Create Account'}
-          </button>
+            <Button type="submit" className="w-full bg-amber-600 hover:bg-amber-700" disabled={loading}>
+              {loading ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Creating account...</>
+              ) : (
+                'Create Account'
+              )}
+            </Button>
 
-          <p className="text-center text-sm text-muted-foreground">
-            Already have an account?{' '}
-            <button onClick={onLogin} className="text-primary hover:underline font-semibold">
-              Login
-            </button>
-          </p>
-        </div>
-      </div>
-    </div>
+            <p className="text-xs text-center text-muted-foreground">
+              Already have an account?{' '}
+              <button
+                type="button"
+                className="text-amber-600 hover:underline font-medium"
+                onClick={() => {
+                  onOpenChange(false)
+                  resetForm()
+                  onSwitchToLogin?.()
+                }}
+              >
+                Login
+              </button>
+            </p>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }

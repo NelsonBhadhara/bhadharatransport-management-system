@@ -1,35 +1,40 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { store } from '@/lib/store'
-import AdminSidebar from '@/components/admin/AdminSidebar'
+import { useAuth } from '@/components/auth/AuthProvider'
+import { AdminSidebar } from '@/components/admin/AdminSidebar'
+import { SidebarProvider } from '@/components/ui/sidebar'
+import { Loader2 } from 'lucide-react'
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  const { profile, isAdmin, isLoading } = useAuth()
   const router = useRouter()
-  const [checked, setChecked] = useState(false)
 
   useEffect(() => {
-    const user = store.getCurrentUser()
-    if (!user || user.role !== 'admin') {
+    if (!isLoading && (!profile || !isAdmin)) {
       router.replace('/')
-    } else {
-      setChecked(true)
     }
-  }, [router])
+  }, [isLoading, profile, isAdmin, router])
 
-  if (!checked) {
+  if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      <div className="flex h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-amber-600" />
       </div>
     )
   }
 
+  if (!profile || !isAdmin) {
+    return null
+  }
+
   return (
-    <div className="flex min-h-screen bg-background">
-      <AdminSidebar />
-      <main className="flex-1 overflow-auto">{children}</main>
-    </div>
+    <SidebarProvider>
+      <div className="flex h-screen w-full">
+        <AdminSidebar />
+        <main className="flex-1 overflow-auto p-6">{children}</main>
+      </div>
+    </SidebarProvider>
   )
 }

@@ -2,164 +2,195 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { X, Truck, Lock, User, ShieldCheck, Users } from 'lucide-react'
-import { store } from '@/lib/store'
+import { useAuth } from '@/components/auth/AuthProvider'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Truck, Shield, Users, ArrowLeft, Loader2 } from 'lucide-react'
 
-type Portal = 'select' | 'admin' | 'client'
+interface LoginModalProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onSwitchToSignup?: () => void
+}
 
-export default function LoginModal({ onClose, onSignup }: { onClose: () => void; onSignup: () => void }) {
-  const router = useRouter()
-  const [portal, setPortal] = useState<Portal>('select')
-  const [username, setUsername] = useState('')
+export function LoginModal({ open, onOpenChange, onSwitchToSignup }: LoginModalProps) {
+  const [portal, setPortal] = useState<'select' | 'admin' | 'client'>('select')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const router = useRouter()
+  const { signIn } = useAuth()
 
-  const handleLogin = () => {
-    setLoading(true)
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
     setError('')
-    setTimeout(() => {
-      const user = store.login(username, password)
-      if (!user) {
-        setError('Invalid username or password. Please try again.')
+    setLoading(true)
+
+    try {
+      const result = await signIn(email, password)
+
+      if (result.error) {
+        setError(result.error)
         setLoading(false)
         return
       }
-      if (portal === 'admin' && user.role !== 'admin') {
-        setError('Access denied. This portal is for administrators only.')
-        store.logout()
+
+      // Check if user role matches selected portal
+      if (portal === 'admin' && result.role !== 'admin') {
+        setError('Access denied. This account does not have admin privileges.')
         setLoading(false)
         return
       }
+
+      onOpenChange(false)
+      router.push(result.role === 'admin' ? '/admin' : '/client')
+    } catch {
+      setError('An unexpected error occurred. Please try again.')
       setLoading(false)
-      if (user.role === 'admin') {
-        router.push('/admin')
-      } else {
-        router.push('/client')
-      }
-    }, 400)
+    }
+  }
+
+  const resetForm = () => {
+    setEmail('')
+    setPassword('')
+    setError('')
+    setPortal('select')
+    setLoading(false)
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
-      <div className="bg-card border border-border rounded-2xl w-full max-w-md shadow-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-border">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-primary rounded-lg flex items-center justify-center">
-              <Truck className="w-5 h-5 text-primary-foreground" />
-            </div>
-            <div>
-              <p className="font-bold text-foreground text-sm">BHADHARA TRANSPORT</p>
-              <p className="text-xs text-muted-foreground">Secure Login</p>
-            </div>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) resetForm()
+        onOpenChange(o)
+      }}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader className="text-center space-y-2">
+          <div className="flex items-center justify-center gap-2">
+            <Truck className="h-6 w-6 text-amber-600" />
+            <span className="text-lg font-bold tracking-tight">BHADHARA TRANSPORT</span>
           </div>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+          <DialogTitle>Secure Login</DialogTitle>
+          <DialogDescription>
+            {portal === 'select'
+              ? 'Select your portal to continue'
+              : `Sign in to your ${portal === 'admin' ? 'Administration' : 'Client'} account`}
+          </DialogDescription>
+        </DialogHeader>
 
-        <div className="p-6">
-          {portal === 'select' ? (
-            /* Portal Selection */
-            <div className="space-y-4">
-              <h2 className="text-xl font-bold text-foreground text-center mb-6">Select Your Portal</h2>
-              <button
+        {portal === 'select' ? (
+          <div className="space-y-4 py-4">
+            <h3 className="text-sm font-semibold text-center text-muted-foreground">Select Your Portal</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                variant="outline"
+                className="h-24 flex flex-col gap-2 hover:border-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/20"
                 onClick={() => setPortal('admin')}
-                className="w-full flex items-center gap-4 p-5 border border-border rounded-xl hover:border-primary/60 hover:bg-primary/5 transition-all group"
               >
-                <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                  <ShieldCheck className="w-6 h-6 text-primary" />
-                </div>
-                <div className="text-left">
-                  <p className="font-bold text-foreground">Administration Portal</p>
-                </div>
-              </button>
-              <button
+                <Shield className="h-8 w-8 text-amber-600" />
+                <span className="text-xs font-medium">Administration Portal</span>
+              </Button>
+              <Button
+                variant="outline"
+                className="h-24 flex flex-col gap-2 hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20"
                 onClick={() => setPortal('client')}
-                className="w-full flex items-center gap-4 p-5 border border-border rounded-xl hover:border-accent/60 hover:bg-accent/5 transition-all group"
               >
-                <div className="w-12 h-12 bg-accent/10 rounded-xl flex items-center justify-center group-hover:bg-accent/20 transition-colors">
-                  <Users className="w-6 h-6 text-accent" />
-                </div>
-                <div className="text-left">
-                  <p className="font-bold text-foreground">Client Portal</p>
-                </div>
-              </button>
-              <div className="pt-2 text-center">
-                <p className="text-sm text-muted-foreground">
-                  Don&apos;t have an account?{' '}
-                  <button onClick={onSignup} className="text-primary hover:underline font-semibold">
-                    Sign Up
-                  </button>
-                </p>
-              </div>
+                <Users className="h-8 w-8 text-blue-600" />
+                <span className="text-xs font-medium">Client Portal</span>
+              </Button>
             </div>
-          ) : (
-            /* Login Form */
-            <div className="space-y-5">
-              <div className="flex items-center gap-3 mb-2">
-                <button
-                  onClick={() => { setPortal('select'); setError('') }}
-                  className="text-muted-foreground hover:text-foreground text-sm"
-                >
-                  ← Back
-                </button>
-                <h2 className="text-lg font-bold text-foreground">
-                  {portal === 'admin' ? 'Administration Login' : 'Client Login'}
-                </h2>
-              </div>
-
-              {error && (
-                <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-sm text-destructive">
-                  {error}
-                </div>
-              )}
-
-              <div className="space-y-3">
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <input
-                    type="text"
-                    placeholder="Username"
-                    value={username}
-                    onChange={e => setUsername(e.target.value)}
-                    className="w-full bg-input border border-border rounded-lg pl-10 pr-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm"
-                  />
-                </div>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <input
-                    type="password"
-                    placeholder="Password"
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleLogin()}
-                    className="w-full bg-input border border-border rounded-lg pl-10 pr-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm"
-                  />
-                </div>
-              </div>
-
+            <p className="text-xs text-center text-muted-foreground">
+              Don&apos;t have an account?{' '}
               <button
-                onClick={handleLogin}
-                disabled={loading || !username || !password}
-                className="w-full py-3 bg-primary text-primary-foreground rounded-lg font-bold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                className="text-amber-600 hover:underline font-medium"
+                onClick={() => {
+                  onOpenChange(false)
+                  onSwitchToSignup?.()
+                }}
               >
-                {loading ? 'Verifying...' : 'Login'}
+                Sign Up
               </button>
+            </p>
+          </div>
+        ) : (
+          <form onSubmit={handleLogin} className="space-y-4 py-4">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="mb-2"
+              onClick={() => { setPortal('select'); setError('') }}
+            >
+              <ArrowLeft className="h-4 w-4 mr-1" /> Back
+            </Button>
 
-              {portal === 'client' && (
-                <p className="text-center text-sm text-muted-foreground">
-                  New client?{' '}
-                  <button onClick={onSignup} className="text-primary hover:underline font-semibold">
-                    Create an account
-                  </button>
-                </p>
-              )}
+            <h3 className="text-sm font-semibold">
+              {portal === 'admin' ? 'Administration Login' : 'Client Login'}
+            </h3>
+
+            {error && (
+              <div className="bg-destructive/10 text-destructive text-sm rounded-md p-3">
+                {error}
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="login-email">Email</Label>
+              <Input
+                id="login-email"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                disabled={loading}
+              />
             </div>
-          )}
-        </div>
-      </div>
-    </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="login-password">Password</Label>
+              <Input
+                id="login-password"
+                type="password"
+                placeholder="Enter your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                disabled={loading}
+              />
+            </div>
+
+            <Button type="submit" className="w-full bg-amber-600 hover:bg-amber-700" disabled={loading}>
+              {loading ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Signing in...</>
+              ) : (
+                'Sign In'
+              )}
+            </Button>
+
+            {portal === 'client' && (
+              <p className="text-xs text-center text-muted-foreground">
+                New client?{' '}
+                <button
+                  type="button"
+                  className="text-amber-600 hover:underline font-medium"
+                  onClick={() => {
+                    onOpenChange(false)
+                    onSwitchToSignup?.()
+                  }}
+                >
+                  Create an account
+                </button>
+              </p>
+            )}
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }
