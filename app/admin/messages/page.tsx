@@ -1,252 +1,231 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Bell, MessageCircle, CheckCircle, Calendar, Clock, X, Send, Check } from 'lucide-react'
-import { store, Booking, Message } from '@/lib/store'
+import { useEffect, useRef, useState } from 'react'
+import { getMessages, sendMessage, markMessagesRead, getProfiles } from '@/lib/supabase/database'
+import { useAuth } from '@/components/auth/AuthProvider'
+import { useRealtimeMessages } from '@/hooks/use-realtime-messages'
 import { format, parseISO } from 'date-fns'
+import { Send, MessageSquare, Search, User, Check, CheckCheck } from 'lucide-react'
+import type { Message } from '@/lib/store'
 
 export default function AdminMessagesPage() {
-  const [bookings, setBookings] = useState<Booking[]>([])
-  const [messages, setMessages] = useState<Message[]>([])
-  const [tab, setTab] = useState<'bookings' | 'messages'>('bookings')
-  const [replyTo, setReplyTo] = useState<string | null>(null)
-  const [replyText, setReplyText] = useState('')
-  const [deliveryTime, setDeliveryTime] = useState('')
+  const { profile: adminProfile } = useAuth()
+  const [profiles, setProfiles] = useState<any[]>([])
+  const [selectedUser, setSelectedUser] = useState<string | null>(null)
+  const [initialMessages, setInitialMessages] = useState<Message[]>([])
+  const [text, setText] = useState('')
+  const [search, setSearch] = useState('')
+  const [loading, setLoading] = useState(true)
+  const bottomRef = useRef<HTMLDivElement>(null)
 
-  const refresh = () => {
-    setBookings(store.getBookings())
-    setMessages(store.getMessages())
+  const messages = useRealtimeMessages(initialMessages)
+
+  useEffect(() => {
+    async function loadProfiles() {
+      const p = await getProfiles()
+      // Filter out self and only show clients/employees
+      setProfiles(p.filter(u => u.username !== 'admin'))
+      setLoading(false)
+    }
+    loadProfiles()
+  }, [])
+
+  useEffect(() => {
+    if (!selectedUser) return
+    async function loadThread() {
+      const m = await getMessages(selectedUser)
+      setInitialMessages(m)
+      // Mark as read when opening thread
+      await markMessagesRead('admin')
+    }
+    loadThread()
+  }, [selectedUser])
+
+  // Real-time read receipt handling
+  useEffect(() => {
+    if (!selectedUser || loading) return
+    const unread = messages.filter(m => m.toUser === 'admin' && m.fromUser === selectedUser && !m.read)
+    if (unread.length > 0) {
+      markMessagesRead('admin')
+    }
+  }, [messages, selectedUser, loading])
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  const handleSend = async () => {
+    const trimmed = text.trim()
+    if (!trimmed || !selectedUser) return
+    
+    await sendMessage({
+      fromUser: 'admin',
+      toUser: selectedUser,
+      content: trimmed,
+    })
+    setText('')
   }
 
-  useEffect(() => { refresh() }, [])
-
-  const pendingBookings = bookings.filter(b => b.status === 'pending')
-  const confirmedBookings = bookings.filter(b => b.status === 'confirmed')
-  const allBookings = [...bookings].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-
-  const handleConfirm = (id: string) => {
-    store.updateBookingStatus(id, 'confirmed', deliveryTime || undefined)
-    refresh()
-    setDeliveryTime('')
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
+    }
   }
 
-  const handleCancel = (id: string) => {
-    store.updateBookingStatus(id, 'cancelled')
-    refresh()
-  }
+  const filteredProfiles = profiles.filter(p => 
+    p.username.toLowerCase().includes(search.toLowerCase()) ||
+    (p.email && p.email.toLowerCase().includes(search.toLowerCase()))
+  )
 
-  const handleComplete = (id: string) => {
-    store.updateBookingStatus(id, 'completed')
-    refresh()
-  }
-
-  const handleSendReply = (toUser: string) => {
-    if (!replyText.trim()) return
-    const admin = store.getCurrentUser()
-    store.saveMessage({ fromUser: admin?.username ?? 'admin', toUser, content: replyText })
-    refresh()
-    setReplyTo(null)
-    setReplyText('')
-  }
-
-  const conversations = (() => {
-    const users = new Set([...messages.map(m => m.fromUser), ...messages.map(m => m.toUser)])
-    const adminUser = store.getCurrentUser()?.username ?? 'admin'
-    return Array.from(users)
-      .filter(u => u !== adminUser)
-      .map(u => ({
-        username: u,
-        messages: messages.filter(m => m.fromUser === u || m.toUser === u).sort((a, b) => a.timestamp.localeCompare(b.timestamp)),
-        unread: messages.filter(m => m.fromUser === u && !m.read).length,
-      }))
-  })()
+  if (loading) return <div className="p-8 text-center text-muted-foreground animate-pulse">Loading messenger...</div>
 
   return (
-    <div className="p-6 md:p-8 max-w-5xl mx-auto">
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Messages & Bookings</h1>
-          <p className="text-sm text-muted-foreground mt-1">Client bookings, inquiries and messages</p>
+    <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-background">
+      {/* Sidebar: User List */}
+      <div className="w-80 border-r border-border flex flex-col bg-card">
+        <div className="p-4 border-b border-border">
+          <h1 className="text-xl font-bold text-foreground mb-4">Messages</h1>
+          <div className="relative">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input 
+              type="text"
+              placeholder="Search users..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full bg-secondary/50 border border-border rounded-xl pl-9 pr-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/50"
+            />
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          {pendingBookings.length > 0 && (
-            <span className="px-2.5 py-1 bg-orange-400/10 text-orange-400 border border-orange-400/20 rounded-full text-xs font-bold">
-              {pendingBookings.length} pending
-            </span>
-          )}
-        </div>
-      </div>
+        
+        <div className="flex-1 overflow-y-auto">
+          {filteredProfiles.map(p => {
+            const lastMsg = messages.filter(m => m.fromUser === p.username || m.toUser === p.username).pop()
+            const isSelected = selectedUser === p.username
+            const hasUnread = messages.some(m => m.fromUser === p.username && m.toUser === 'admin' && !m.read)
 
-      {/* Tabs */}
-      <div className="flex gap-1 bg-secondary/30 p-1 rounded-xl mb-6 w-fit">
-        {(['bookings', 'messages'] as const).map(t => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors capitalize ${
-              tab === t ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {t === 'bookings' ? `Bookings (${allBookings.length})` : `Messages (${conversations.length})`}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'bookings' && (
-        <div className="space-y-4">
-          {allBookings.length === 0 ? (
-            <div className="bg-card border border-border rounded-2xl p-12 text-center">
-              <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-muted-foreground">No bookings yet.</p>
-            </div>
-          ) : (
-            allBookings.map(booking => (
-              <div key={booking.id} className="bg-card border border-border rounded-2xl p-5">
-                <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="font-bold text-foreground">{booking.clientName}</p>
-                      <span className={`px-2 py-0.5 text-xs rounded-full border font-semibold ${
-                        booking.status === 'pending' ? 'bg-orange-400/10 text-orange-400 border-orange-400/20'
-                          : booking.status === 'confirmed' ? 'bg-green-400/10 text-green-400 border-green-400/20'
-                          : booking.status === 'completed' ? 'bg-accent/10 text-accent border-accent/20'
-                          : 'bg-muted text-muted-foreground border-border'
-                      }`}>
-                        {booking.status}
-                      </span>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {booking.loadTypeLabel} × {booking.numberOfLoads} load{booking.numberOfLoads > 1 ? 's' : ''} —
-                      Preferred: {booking.preferredDate}
-                    </p>
-                    {booking.deliveryAddress && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Delivery: {booking.deliveryAddress}
-                      </p>
-                    )}
-                    {booking.estimatedDelivery && (
-                      <p className="text-xs text-green-400 mt-1 flex items-center gap-1">
-                        <Clock className="w-3 h-3" /> ETA: {booking.estimatedDelivery}
-                      </p>
-                    )}
-                    {booking.notes && (
-                      <p className="text-xs text-muted-foreground italic mt-1">&quot;{booking.notes}&quot;</p>
-                    )}
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Booked: {format(parseISO(booking.createdAt), 'dd/MM/yyyy HH:mm')}
-                    </p>
+            return (
+              <button
+                key={p.id}
+                onClick={() => setSelectedUser(p.username)}
+                className={`w-full p-4 flex items-center gap-3 border-b border-border/50 transition-colors text-left ${
+                  isSelected ? 'bg-primary/10 border-r-2 border-r-primary' : 'hover:bg-secondary/30'
+                }`}
+              >
+                <div className="relative">
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg ${
+                    isSelected ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'
+                  }`}>
+                    {p.username[0].toUpperCase()}
                   </div>
+                  {hasUnread && (
+                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-primary border-2 border-card rounded-full" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <p className={`font-bold truncate ${isSelected ? 'text-primary' : 'text-foreground'}`}>
+                      {p.username}
+                    </p>
+                    {lastMsg && (
+                      <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                        {format(parseISO(lastMsg.timestamp), 'HH:mm')}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {lastMsg ? lastMsg.content : 'No messages yet'}
+                  </p>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      </div>
 
-                  {booking.status === 'pending' && (
-                    <div className="flex flex-col gap-2">
-                      <input
-                        type="text"
-                        placeholder="Expected delivery time (e.g. 2hrs)"
-                        value={deliveryTime}
-                        onChange={e => setDeliveryTime(e.target.value)}
-                        className="bg-input border border-border rounded-lg px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 w-52"
-                      />
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleConfirm(booking.id)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-green-400/10 text-green-400 border border-green-400/20 rounded-lg text-xs font-semibold hover:bg-green-400/20 transition-colors"
-                        >
-                          <CheckCircle className="w-3.5 h-3.5" /> Confirm
-                        </button>
-                        <button
-                          onClick={() => handleCancel(booking.id)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-destructive/10 text-destructive border border-destructive/20 rounded-lg text-xs font-semibold hover:bg-destructive/20 transition-colors"
-                        >
-                          <X className="w-3.5 h-3.5" /> Cancel
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  {booking.status === 'confirmed' && (
-                    <button
-                      onClick={() => handleComplete(booking.id)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-accent/10 text-accent border border-accent/20 rounded-lg text-xs font-semibold hover:bg-accent/20 transition-colors"
-                    >
-                      <Check className="w-3.5 h-3.5" /> Mark Complete
-                    </button>
-                  )}
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col bg-background/50">
+        {selectedUser ? (
+          <>
+            {/* Chat Header */}
+            <div className="px-6 py-4 border-b border-border bg-card flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center font-bold text-primary">
+                  {selectedUser[0].toUpperCase()}
+                </div>
+                <div>
+                  <p className="font-bold text-foreground">{selectedUser}</p>
+                  <p className="text-xs text-green-400 font-medium">Online</p>
                 </div>
               </div>
-            ))
-          )}
-        </div>
-      )}
-
-      {tab === 'messages' && (
-        <div className="space-y-4">
-          {conversations.length === 0 ? (
-            <div className="bg-card border border-border rounded-2xl p-12 text-center">
-              <MessageCircle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-muted-foreground">No messages yet.</p>
             </div>
-          ) : (
-            conversations.map(conv => (
-              <div key={conv.username} className="bg-card border border-border rounded-2xl overflow-hidden">
-                <div className="flex items-center justify-between p-4 border-b border-border">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 bg-primary/10 rounded-full flex items-center justify-center font-bold text-primary text-sm">
-                      {conv.username[0].toUpperCase()}
-                    </div>
-                    <div>
-                      <p className="font-semibold text-foreground text-sm">{conv.username}</p>
-                      {conv.unread > 0 && (
-                        <span className="text-xs text-orange-400">{conv.unread} unread</span>
-                      )}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setReplyTo(replyTo === conv.username ? null : conv.username)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-primary border border-primary/30 rounded-lg hover:bg-primary/10 transition-colors"
-                  >
-                    <Send className="w-3.5 h-3.5" /> Reply
-                  </button>
-                </div>
 
-                <div className="p-4 space-y-2 max-h-48 overflow-y-auto">
-                  {conv.messages.map(msg => {
-                    const isAdmin = msg.fromUser !== conv.username
-                    return (
-                      <div key={msg.id} className={`flex ${isAdmin ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-xs px-3 py-2 rounded-xl text-sm ${
-                          isAdmin ? 'bg-primary text-primary-foreground' : 'bg-secondary text-foreground'
-                        }`}>
-                          <p>{msg.content}</p>
-                          <p className="text-xs opacity-60 mt-0.5">{format(parseISO(msg.timestamp), 'dd/MM HH:mm')}</p>
+            {/* Message Thread */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {messages.filter(m => m.fromUser === selectedUser || m.toUser === selectedUser).map(msg => {
+                const isMe = msg.fromUser === 'admin'
+                return (
+                  <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[70%] group`}>
+                      <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
+                        isMe 
+                          ? 'bg-primary text-primary-foreground rounded-br-sm' 
+                          : 'bg-card border border-border text-foreground rounded-bl-sm'
+                      }`}>
+                        <p>{msg.content}</p>
+                        <div className={`flex items-center gap-1.5 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                          <span className={`text-[10px] ${isMe ? 'text-primary-foreground/60' : 'text-muted-foreground'}`}>
+                            {format(parseISO(msg.timestamp), 'HH:mm')}
+                          </span>
+                          {isMe && (
+                            msg.read ? (
+                              <CheckCheck className="w-3 h-3 text-primary-foreground/60" />
+                            ) : (
+                              <Check className="w-3 h-3 text-primary-foreground/60" />
+                            )
+                          )}
                         </div>
                       </div>
-                    )
-                  })}
-                </div>
-
-                {replyTo === conv.username && (
-                  <div className="flex gap-2 p-4 border-t border-border">
-                    <input
-                      type="text"
-                      placeholder="Type your reply..."
-                      value={replyText}
-                      onChange={e => setReplyText(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && handleSendReply(conv.username)}
-                      className="flex-1 bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                    />
-                    <button
-                      onClick={() => handleSendReply(conv.username)}
-                      disabled={!replyText.trim()}
-                      className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40"
-                    >
-                      Send
-                    </button>
+                    </div>
                   </div>
-                )}
+                )
+              })}
+              <div ref={bottomRef} />
+            </div>
+
+            {/* Chat Input */}
+            <div className="p-4 bg-card border-t border-border">
+              <div className="max-w-4xl mx-auto flex items-end gap-3">
+                <textarea
+                  rows={1}
+                  placeholder="Type your message..."
+                  value={text}
+                  onChange={e => setText(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  className="flex-1 bg-input border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/50 resize-none leading-relaxed"
+                />
+                <button
+                  onClick={handleSend}
+                  disabled={!text.trim()}
+                  className="p-3 bg-primary text-primary-foreground rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                >
+                  <Send className="w-5 h-5" />
+                </button>
               </div>
-            ))
-          )}
-        </div>
-      )}
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
+            <div className="w-20 h-20 bg-secondary rounded-full flex items-center justify-center mb-4">
+              <MessageSquare className="w-10 h-10 text-muted-foreground/30" />
+            </div>
+            <h2 className="text-xl font-bold text-foreground">Select a conversation</h2>
+            <p className="text-muted-foreground mt-2 max-w-sm">
+              Choose a user from the sidebar to start messaging. You can see their online status and message history.
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

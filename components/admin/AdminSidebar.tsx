@@ -1,95 +1,90 @@
 'use client'
 
-import { usePathname, useRouter } from 'next/navigation'
-import {
-  Truck, ClipboardList, Users, Wrench, BarChart3, LogOut, Home, Bell, ChevronRight
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+import { 
+  LayoutDashboard, 
+  Truck, 
+  Users, 
+  ClipboardList, 
+  DollarSign, 
+  MessageSquare,
+  Settings,
+  LogOut,
+  ChevronLeft,
+  ChevronRight,
+  ShieldAlert
 } from 'lucide-react'
-import { store } from '@/lib/store'
 import { useState } from 'react'
+import { useAuth } from '@/components/auth/AuthProvider'
 
-const NAV = [
-  { label: 'Overview', href: '/admin', icon: Home },
-  { label: 'Transactions', href: '/admin/transactions', icon: ClipboardList },
-  { label: 'Garage Manager', href: '/admin/garage', icon: Truck },
-  { label: 'Employees', href: '/admin/employees', icon: Users },
-  { label: 'Reports & Analytics', href: '/admin/reports', icon: BarChart3 },
-  { label: 'Messages', href: '/admin/messages', icon: Bell },
+const menuItems = [
+  { icon: LayoutDashboard, label: 'Overview', href: '/admin' },
+  { icon: ClipboardList, label: 'Transactions', href: '/admin/transactions' },
+  { icon: Truck, label: 'Garage', href: '/admin/garage' },
+  { icon: Users, label: 'Employees', href: '/admin/employees' },
+  { icon: ShieldAlert, label: 'Users', href: '/admin/users' },
+  { icon: MessageSquare, label: 'Messages', href: '/admin/messages' },
+  { icon: DollarSign, label: 'Reports', href: '/admin/reports' },
+  { icon: Settings, label: 'Settings', href: '/admin/settings' },
 ]
 
 export default function AdminSidebar() {
   const pathname = usePathname()
-  const router = useRouter()
+  const { signOut } = useAuth()
   const [collapsed, setCollapsed] = useState(false)
 
-  const user = store.getCurrentUser()
-
-  const handleLogout = () => {
-    store.logout()
-    router.push('/')
-  }
-
   return (
-    <aside
-      className={`${collapsed ? 'w-16' : 'w-60'} flex-shrink-0 flex flex-col bg-sidebar border-r border-sidebar-border transition-all duration-200 min-h-screen`}
-    >
-      {/* Logo */}
-      <div className="flex items-center gap-3 px-4 py-5 border-b border-sidebar-border">
-        <div className="w-9 h-9 flex-shrink-0 bg-primary rounded-lg flex items-center justify-center">
-          <Truck className="w-5 h-5 text-primary-foreground" />
-        </div>
+    <div className={`flex flex-col bg-card border-r border-border transition-all duration-300 ${collapsed ? 'w-20' : 'w-64'}`}>
+      {/* Header */}
+      <div className="p-6 border-b border-border flex items-center justify-between">
         {!collapsed && (
-          <div className="overflow-hidden">
-            <p className="font-bold text-sm text-sidebar-foreground whitespace-nowrap">BHADHARA</p>
-            <p className="text-xs text-primary whitespace-nowrap">Admin Portal</p>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+              <Truck className="w-5 h-5 text-primary-foreground" />
+            </div>
+            <span className="font-black text-foreground tracking-tighter">BHADHARA</span>
           </div>
         )}
-        <button
+        <button 
           onClick={() => setCollapsed(!collapsed)}
-          className={`ml-auto text-muted-foreground hover:text-foreground transition-colors ${collapsed ? 'rotate-180' : ''}`}
+          className="p-1.5 hover:bg-secondary rounded-lg transition-colors text-muted-foreground"
         >
-          <ChevronRight className="w-4 h-4" />
+          {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
         </button>
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 p-3 space-y-1">
-        {NAV.map(item => {
-          const active = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href))
+      {/* Navigation */}
+      <nav className="flex-1 p-4 space-y-2">
+        {menuItems.map((item) => {
+          const isActive = pathname === item.href
           return (
-            <button
+            <Link
               key={item.href}
-              onClick={() => router.push(item.href)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-sm ${
-                active
-                  ? 'bg-primary text-primary-foreground font-semibold'
-                  : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+              href={item.href}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group ${
+                isActive 
+                  ? 'bg-primary text-primary-foreground font-bold shadow-lg shadow-primary/20' 
+                  : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
               }`}
-              title={collapsed ? item.label : undefined}
             >
-              <item.icon className="w-4.5 h-4.5 flex-shrink-0" />
+              <item.icon className={`w-5 h-5 ${isActive ? 'text-primary-foreground' : 'group-hover:scale-110 transition-transform'}`} />
               {!collapsed && <span>{item.label}</span>}
-            </button>
+            </Link>
           )
         })}
       </nav>
 
-      {/* User / Logout */}
-      <div className="p-3 border-t border-sidebar-border space-y-1">
-        {!collapsed && (
-          <div className="px-3 py-2">
-            <p className="text-xs font-semibold text-primary truncate">{user?.username}</p>
-            <p className="text-xs text-muted-foreground">Administrator</p>
-          </div>
-        )}
-        <button
-          onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
-          title={collapsed ? 'Logout' : undefined}
+      {/* Footer */}
+      <div className="p-4 border-t border-border">
+        <button 
+          onClick={signOut}
+          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-destructive hover:bg-destructive/10 transition-colors font-semibold"
         >
-          <LogOut className="w-4 h-4 flex-shrink-0" />
+          <LogOut className="w-5 h-5" />
           {!collapsed && <span>Logout</span>}
         </button>
       </div>
-    </aside>
+    </div>
   )
 }
