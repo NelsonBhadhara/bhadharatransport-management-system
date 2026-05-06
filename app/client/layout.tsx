@@ -3,13 +3,14 @@
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { store } from '@/lib/store'
-import { Truck, Home, Calendar, FileText, MessageCircle, LogOut, Menu, X } from 'lucide-react'
+import { Truck, Home, Calendar, FileText, MessageCircle, LogOut, Menu, X, Cloud } from 'lucide-react'
 import Link from 'next/link'
 
 const NAV = [
   { label: 'Dashboard', href: '/client', icon: Home },
   { label: 'Book a Load', href: '/client/book', icon: Calendar },
   { label: 'My History', href: '/client/history', icon: FileText },
+  { label: 'Files', href: '/client/files', icon: Cloud },
   { label: 'Messages', href: '/client/messages', icon: MessageCircle },
 ]
 
