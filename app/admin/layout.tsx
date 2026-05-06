@@ -2,21 +2,23 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { store } from '@/lib/store'
+import { useAuth } from '@/components/auth/AuthProvider'
 import AdminSidebar from '@/components/admin/AdminSidebar'
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
+  const { user, profile, loading } = useAuth()
   const [checked, setChecked] = useState(false)
 
   useEffect(() => {
-    const user = store.getCurrentUser()
-    if (!user || user.role !== 'admin') {
-      router.replace('/')
-    } else {
-      setChecked(true)
+    if (!loading) {
+      if (!user || profile?.role !== 'admin') {
+        router.replace('/')
+      } else {
+        setChecked(true)
+      }
     }
-  }, [router])
+  }, [user, profile, loading, router])
 
   if (!checked) {
     return (

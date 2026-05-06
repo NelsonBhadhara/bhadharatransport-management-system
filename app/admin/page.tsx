@@ -1,23 +1,39 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Truck, DollarSign, ClipboardList, Users, TrendingUp, Bell, Calendar } from 'lucide-react'
-import { store, DailyRecord, Booking } from '@/lib/store'
+import { Truck as TruckIcon, DollarSign, ClipboardList, Users, TrendingUp, Bell, Calendar } from 'lucide-react'
+import type { DailyRecord, Booking, Truck, Employee } from '@/lib/store'
+import { getRecords, getBookings, getTrucks, getEmployees } from '@/lib/supabase/database'
 import { format } from 'date-fns'
 import Link from 'next/link'
+import { useAuth } from '@/components/auth/AuthProvider'
 
 export default function AdminOverviewPage() {
+  const { profile } = useAuth()
   const [records, setRecords] = useState<DailyRecord[]>([])
   const [bookings, setBookings] = useState<Booking[]>([])
-  const [trucks, setTrucks] = useState(store.getTrucks())
-  const [employees, setEmployees] = useState(store.getEmployees())
+  const [trucks, setTrucks] = useState<Truck[]>([])
+  const [employees, setEmployees] = useState<Employee[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    setRecords(store.getRecords())
-    setBookings(store.getBookings())
-    setTrucks(store.getTrucks())
-    setEmployees(store.getEmployees())
+    async function loadData() {
+      const [r, b, t, e] = await Promise.all([
+        getRecords(),
+        getBookings(),
+        getTrucks(),
+        getEmployees()
+      ])
+      setRecords(r)
+      setBookings(b)
+      setTrucks(t)
+      setEmployees(e)
+      setLoading(false)
+    }
+    loadData()
   }, [])
+
+  if (loading) return <div className="p-8 text-center text-muted-foreground animate-pulse">Loading dashboard...</div>
 
   const today = format(new Date(), 'yyyy-MM-dd')
   const todayRecord = records.find(r => r.date === today)
@@ -52,14 +68,14 @@ export default function AdminOverviewPage() {
     {
       label: 'Monthly Loads',
       value: String(monthLoads),
-      icon: Truck,
+      icon: TruckIcon,
       color: 'text-blue-400',
       bg: 'bg-blue-400/10',
     },
     {
       label: 'Active Trucks',
       value: `${activeTrucks}/7`,
-      icon: Truck,
+      icon: TruckIcon,
       color: 'text-yellow-400',
       bg: 'bg-yellow-400/10',
     },
@@ -203,7 +219,7 @@ export default function AdminOverviewPage() {
         <div className="bg-card border border-border rounded-xl p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-bold text-foreground flex items-center gap-2">
-              <Truck className="w-4 h-4 text-primary" />
+              <TruckIcon className="w-4 h-4 text-primary" />
               Fleet Status
             </h2>
             <Link href="/admin/garage" className="text-xs text-primary hover:underline">Manage</Link>
