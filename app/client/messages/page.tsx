@@ -1,163 +1,118 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { store, Message } from '@/lib/store'
-import { format, parseISO } from 'date-fns'
-import { Send, MessageSquare, ChevronRight } from 'lucide-react'
-
-const ADMIN_WA = [
-  { label: '0773 083 687', wa: '263773083687' },
-  { label: '0774 049 526', wa: '263774049526' },
-  { label: '0770 083 687', wa: '263770083687' },
-]
-
-const GENERAL_WA_MSG = encodeURIComponent(
-  `*BHADHARA TRANSPORT – General Inquiry*\n\nHello, I would like to inquire about your transport services.\n\nPlease advise on availability, pricing, and how to arrange a cash payment meetup.\n\nThank you.`
-)
+import { useAuth } from '@/components/auth/AuthProvider'
+import { useRealtimeMessages } from '@/hooks/use-realtime-messages'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Skeleton } from '@/components/ui/skeleton'
+import { format } from 'date-fns'
+import { Send, MessageSquare } from 'lucide-react'
 
 export default function ClientMessagesPage() {
-  const user = store.getCurrentUser()
-  const [messages, setMessages] = useState<Message[]>([])
-  const [text, setText] = useState('')
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const { profile } = useAuth()
+  const username = profile?.username ?? ''
+  const { messages, sendMessage, unreadCount, isLoading, markAsRead } = useRealtimeMessages(username)
+  const [newMessage, setNewMessage] = useState('')
+  const scrollRef = useRef<HTMLDivElement>(null)
 
-  const loadMessages = () => {
-    store.markMessagesRead(user?.username ?? '')
-    const all = store.getMessages()
-    const relevant = all.filter(
-      m => m.fromUser === user?.username || m.toUser === user?.username
-    )
-    setMessages(relevant.sort((a, b) => a.timestamp.localeCompare(b.timestamp)))
-  }
+  // Client messages go to admin by default
+  const adminUsername = 'admin'
+
+  // Filter messages between this client and admin(s)
+  const myMessages = messages
 
   useEffect(() => {
-    loadMessages()
-    const interval = setInterval(loadMessages, 3000)
-    return () => clearInterval(interval)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    markAsRead()
+  }, [messages, markAsRead])
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
   }, [messages])
 
-  const handleSend = () => {
-    const trimmed = text.trim()
-    if (!trimmed) return
-    store.saveMessage({
-      fromUser: user?.username ?? '',
-      toUser: 'admin',
-      content: trimmed,
-    })
-    setText('')
-    setTimeout(loadMessages, 100)
+  const handleSend = async () => {
+    if (!newMessage.trim()) return
+    // Send to the most recent admin who messaged, or default 'admin'
+    const lastAdminMsg = [...messages].reverse().find(m => m.fromUser !== username)
+    const toUser = lastAdminMsg?.fromUser ?? adminUsername
+    await sendMessage(newMessage.trim(), toUser)
+    setNewMessage('')
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSend()
-    }
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-[500px]" />
+      </div>
+    )
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-80px)] max-w-2xl mx-auto">
-      {/* Header */}
-      <div className="mb-4">
-        <h1 className="text-2xl font-bold text-foreground">Messages</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Leave a message for the Bhadhara Transport team, or contact us directly on WhatsApp for urgent matters.
-        </p>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Messages</h1>
+        {unreadCount > 0 && (
+          <Badge variant="destructive">{unreadCount} unread</Badge>
+        )}
       </div>
 
-      {/* WhatsApp quick contact */}
-      <div className="bg-card border border-border rounded-2xl p-4 mb-4">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-          Preferred — WhatsApp for urgent inquiries & payment meetups
-        </p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          {ADMIN_WA.map(c => (
-            <a
-              key={c.wa}
-              href={`https://wa.me/${c.wa}?text=${GENERAL_WA_MSG}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-between px-4 py-3 bg-green-500 text-white rounded-xl font-semibold text-sm hover:bg-green-600 transition-colors"
-            >
-              <div className="flex items-center gap-2">
-                <MessageSquare className="w-4 h-4" />
-                <span>{c.label}</span>
+      <Card className="flex flex-col h-[calc(100vh-250px)]">
+        <CardHeader className="py-3 border-b">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <MessageSquare className="h-4 w-4" /> Chat with Bhadhara Transport
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex-1 flex flex-col p-0">
+          <ScrollArea className="flex-1 p-4" ref={scrollRef}>
+            {myMessages.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+                No messages yet. Send us a message!
               </div>
-              <ChevronRight className="w-4 h-4 opacity-70" />
-            </a>
-          ))}
-        </div>
-      </div>
-
-      {/* In-app message thread */}
-      <div className="flex-1 bg-card border border-border rounded-2xl flex flex-col overflow-hidden">
-        <div className="px-4 py-3 border-b border-border">
-          <p className="text-sm font-semibold text-foreground">In-App Messages</p>
-          <p className="text-xs text-muted-foreground">For non-urgent enquiries only. Cash payment meetups must be arranged via WhatsApp.</p>
-        </div>
-
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full gap-2 text-center py-10">
-              <div className="w-12 h-12 bg-secondary rounded-full flex items-center justify-center">
-                <MessageSquare className="w-6 h-6 text-muted-foreground" />
-              </div>
-              <p className="text-sm text-muted-foreground">No messages yet. Say hello!</p>
-            </div>
-          )}
-
-          {messages.map(msg => {
-            const isMe = msg.fromUser === user?.username
-            return (
-              <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                <div
-                  className={`max-w-[75%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
-                    isMe
-                      ? 'bg-primary text-primary-foreground rounded-br-sm'
-                      : 'bg-secondary text-foreground rounded-bl-sm'
-                  }`}
-                >
-                  <p>{msg.content}</p>
-                  <p
-                    className={`text-xs mt-1 ${
-                      isMe ? 'text-primary-foreground/60 text-right' : 'text-muted-foreground'
-                    }`}
+            ) : (
+              <div className="space-y-3">
+                {myMessages.map(m => (
+                  <div
+                    key={m.id}
+                    className={`flex ${m.fromUser === username ? 'justify-end' : 'justify-start'}`}
                   >
-                    {format(parseISO(msg.timestamp), 'HH:mm · d MMM')}
-                  </p>
-                </div>
+                    <div
+                      className={`max-w-[70%] rounded-lg px-3 py-2 text-sm ${
+                        m.fromUser === username
+                          ? 'bg-amber-600 text-white'
+                          : 'bg-muted'
+                      }`}
+                    >
+                      <p>{m.content}</p>
+                      <p className={`text-xs mt-1 ${
+                        m.fromUser === username ? 'text-amber-200' : 'text-muted-foreground'
+                      }`}>
+                        {format(new Date(m.timestamp), 'HH:mm')}
+                      </p>
+                    </div>
+                  </div>
+                ))}
               </div>
-            )
-          })}
-          <div ref={bottomRef} />
-        </div>
-
-        {/* Input */}
-        <div className="border-t border-border p-3 flex items-end gap-2">
-          <textarea
-            rows={1}
-            placeholder="Type a message..."
-            value={text}
-            onChange={e => setText(e.target.value)}
-            onKeyDown={handleKeyDown}
-            className="flex-1 bg-input border border-border rounded-xl px-3 py-2.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm resize-none leading-relaxed"
-          />
-          <button
-            onClick={handleSend}
-            disabled={!text.trim()}
-            className="p-2.5 bg-primary text-primary-foreground rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-            aria-label="Send message"
-          >
-            <Send className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
+            )}
+          </ScrollArea>
+          <div className="p-3 border-t flex gap-2">
+            <Input
+              placeholder="Type a message..."
+              value={newMessage}
+              onChange={e => setNewMessage(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSend()}
+            />
+            <Button onClick={handleSend} size="icon" className="bg-amber-600 hover:bg-amber-700">
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
