@@ -1,788 +1,374 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { useAuth } from '@/components/auth/AuthProvider'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Plus, Save, Trash2, Loader2, Calendar } from 'lucide-react'
+import { format } from 'date-fns'
+import { useToast } from '@/hooks/use-toast'
+import * as db from '@/lib/supabase/database'
 import {
-  Plus, Save, ChevronDown, ChevronUp, Trash2, Search,
-  Printer, FileText, CalendarDays, CheckCircle, XCircle, Edit3, Settings
-} from 'lucide-react'
-import {
-  store, Load, DailyRecord, Expense, LoadType, LOAD_LABELS,
-  WORKERS_FEE_PER_LOAD, RIVERSAND_FEE_PER_LOAD, computeRecord, DefaultExpenses, LoadPrices
+  type Load, type Expense, type DailyRecord, type Truck, type Employee,
+  type LoadType, type PaymentStatus, LOAD_LABELS, computeRecord,
 } from '@/lib/store'
-import { format, parseISO } from 'date-fns'
-import { v4 as uuid } from 'crypto'
 
-const DRIVERS = ['Gombe', 'Tanya', 'Tinashe', 'Fidza']
-const PAID_PRESETS = [80, 90, 100]
-
-function newLoad(trucks: any[] = []): Load {
-  const defaultDriver = 'Gombe'
-  const truck = trucks.find(t => t.driverName === defaultDriver)
-  return {
-    id: Math.random().toString(36).slice(2),
-    loadType: 'riversand',
-    loadTypeLabel: 'River Sand',
-    ratePerLoad: 90,
-    numberOfLoads: 1,
-    customerName: '',
-    driverName: defaultDriver,
-    truckPlate: truck?.plate ?? '',
-    paymentStatus: 'unpaid',
-    amountPaid: 0,
-    notes: '',
-  }
-}
-
-function newExpense(): Expense {
-  return { workersFee: 0, riversandFee: 0, tyres: 0, welding: 0, other: 0 }
-}
+const emptyExpense: Expense = { workersFee: 0, riversandFee: 0, tyres: 0, welding: 0, other: 0, otherLabel: '' }
 
 export default function TransactionsPage() {
-  const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'))
+  const { profile } = useAuth()
+  const { toast } = useToast()
   const [records, setRecords] = useState<DailyRecord[]>([])
-  const [editingRecord, setEditingRecord] = useState<DailyRecord | null>(null)
-  const [loads, setLoads] = useState<Load[]>([newLoad(store.getTrucks())])
-  const [expenses, setExpenses] = useState<Expense>(newExpense())
-  const [expenseChecks, setExpenseChecks] = useState({
-    workersFee: false, riversandFee: false, tyres: false, welding: false, other: false
+  const [trucks, setTrucks] = useState<Truck[]>([])
+  const [employees, setEmployees] = useState<Employee[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  // Current day form
+  const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [loads, setLoads] = useState<Load[]>([])
+  const [expenses, setExpenses] = useState<Expense>(emptyExpense)
+  const [editingRecordId, setEditingRecordId] = useState<string | null>(null)
+
+  // Load dialog
+  const [loadDialogOpen, setLoadDialogOpen] = useState(false)
+  const [editLoadIdx, setEditLoadIdx] = useState<number | null>(null)
+  const [loadForm, setLoadForm] = useState<Omit<Load, 'id'>>({
+    loadType: 'riversand', loadTypeLabel: 'River Sand', ratePerLoad: 90,
+    numberOfLoads: 1, customerName: '', driverName: '', truckPlate: '',
+    paymentStatus: 'unpaid', amountPaid: 0, notes: '',
   })
-  const [computed, setComputed] = useState(false)
-  const [computedResult, setComputedResult] = useState({ grossRevenue: 0, totalExpenses: 0, netRevenue: 0 })
-  const [searchQuery, setSearchQuery] = useState('')
-  const [paymentFilter, setPaymentFilter] = useState<'all' | 'paid' | 'unpaid'>('all')
-  const [showForm, setShowForm] = useState(false)
-  const [trucks, setTrucks] = useState(store.getTrucks())
-  const [saved, setSaved] = useState(false)
-  const [defaultExpenses, setDefaultExpenses] = useState<DefaultExpenses>(store.getDefaultExpenses())
-  const [editingExpenses, setEditingExpenses] = useState(false)
-  const [loadPrices, setLoadPrices] = useState<LoadPrices>(store.getLoadPrices())
-  const [editingPrices, setEditingPrices] = useState(false)
+
+  const [loadPrices, setLoadPrices] = useState({ riversand: 90, pitsand: 85, quarrystone: 85, gravel: 90, other: 0 })
+  const [defaultExp, setDefaultExp] = useState({ workersFeePerLoad: 20, riversandFeePerLoad: 5 })
 
   useEffect(() => {
-    setRecords(store.getRecords())
-    setTrucks(store.getTrucks())
+    const init = async () => {
+      const [r, t, e, lp, de] = await Promise.all([
+        db.getRecords(), db.getTrucks(), db.getEmployees(),
+        db.getLoadPrices(), db.getDefaultExpenses(),
+      ])
+      setRecords(r); setTrucks(t); setEmployees(e)
+      setLoadPrices(lp); setDefaultExp(de)
+      setLoading(false)
+    }
+    init()
   }, [])
 
-  const filteredRecords = records
-    .filter(r => {
-      // Search filter
-      if (searchQuery && !r.date.includes(searchQuery) &&
-          !r.loads.some(l => l.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          l.driverName.toLowerCase().includes(searchQuery.toLowerCase()))) {
-        return false
-      }
-      // Payment status filter
-      if (paymentFilter === 'paid') return r.loads.some(l => l.paymentStatus === 'paid')
-      if (paymentFilter === 'unpaid') return r.loads.some(l => l.paymentStatus === 'unpaid')
-      return true
-    })
-    .sort((a, b) => b.date.localeCompare(a.date))
+  // Load existing record when date changes
+  useEffect(() => {
+    const existing = records.find(r => r.date === selectedDate)
+    if (existing) {
+      setLoads(existing.loads)
+      setExpenses(existing.expenses)
+      setEditingRecordId(existing.id)
+    } else {
+      setLoads([])
+      setExpenses(emptyExpense)
+      setEditingRecordId(null)
+    }
+  }, [selectedDate, records])
 
-  const dateRecord = records.find(r => r.date === selectedDate)
+  const drivers = employees.filter(e => e.role === 'driver' && e.status === 'active')
+  const activeTrucks = trucks.filter(t => t.status === 'active')
 
-  const updateLoad = (idx: number, updates: Partial<Load>) => {
-    const updatedLoads = loads.map((l, i) => {
-      if (i !== idx) return l
-      const updated = { ...l, ...updates }
-      if (updates.loadType) {
-        updated.loadTypeLabel = LOAD_LABELS[updates.loadType as LoadType]
-        updated.ratePerLoad = loadPrices[updates.loadType as LoadType]
-      }
-      // auto-set truck plate from driver
-      if (updates.driverName) {
-        const truck = trucks.find(t => t.driverName === updates.driverName)
-        updated.truckPlate = truck?.plate ?? ''
-      }
-      return updated
+  const openAddLoad = () => {
+    setEditLoadIdx(null)
+    setLoadForm({
+      loadType: 'riversand', loadTypeLabel: 'River Sand', ratePerLoad: loadPrices.riversand,
+      numberOfLoads: 1, customerName: '', driverName: drivers[0]?.name ?? '',
+      truckPlate: activeTrucks[0]?.plate ?? '', paymentStatus: 'unpaid', amountPaid: 0, notes: '',
     })
-    setLoads(updatedLoads)
-    // Auto-calculate expenses whenever any load is updated
-    const total = updatedLoads.reduce((s, l) => s + l.numberOfLoads, 0)
-    const riverSandLoads = updatedLoads.filter(l => l.loadType === 'riversand').reduce((s, l) => s + l.numberOfLoads, 0)
-    setExpenses(prev => ({
-      ...prev,
-      // Workers fee is per load - auto-added whenever loads exist
-      workersFee: total > 0 ? total * defaultExpenses.workersFeePerLoad : 0,
-      // Riversand fee only for riversand loads
-      riversandFee: riverSandLoads > 0 ? riverSandLoads * defaultExpenses.riversandFeePerLoad : 0,
-    }))
-    setComputed(false)
-    setComputed(false)
+    setLoadDialogOpen(true)
   }
 
-  const addLoad = () => {
-    const last = loads[loads.length - 1]
-    const newLoads = [...loads, { ...newLoad(trucks), driverName: last?.driverName ?? 'Gombe' }]
-    setLoads(newLoads)
-    // Auto-calculate expenses when a new load is added
-    const total = newLoads.reduce((s, l) => s + l.numberOfLoads, 0)
-    const riverSandLoads = newLoads.filter(l => l.loadType === 'riversand').reduce((s, l) => s + l.numberOfLoads, 0)
-    setExpenses(prev => ({
-      ...prev,
-      workersFee: total > 0 ? total * defaultExpenses.workersFeePerLoad : 0,
-      riversandFee: riverSandLoads > 0 ? riverSandLoads * defaultExpenses.riversandFeePerLoad : 0,
-    }))
-    setComputed(false)
+  const openEditLoad = (idx: number) => {
+    const l = loads[idx]
+    setEditLoadIdx(idx)
+    setLoadForm({ ...l })
+    setLoadDialogOpen(true)
+  }
+
+  const saveLoad = () => {
+    if (editLoadIdx !== null) {
+      const updated = [...loads]
+      updated[editLoadIdx] = { ...updated[editLoadIdx], ...loadForm }
+      setLoads(updated)
+    } else {
+      setLoads([...loads, { id: crypto.randomUUID(), ...loadForm }])
+    }
+    setLoadDialogOpen(false)
   }
 
   const removeLoad = (idx: number) => {
-    const newLoads = loads.filter((_, i) => i !== idx)
-    setLoads(newLoads)
-    // Recalculate expenses after removing a load
-    const total = newLoads.reduce((s, l) => s + l.numberOfLoads, 0)
-    const riverSandLoads = newLoads.filter(l => l.loadType === 'riversand').reduce((s, l) => s + l.numberOfLoads, 0)
-    setExpenses(prev => ({
-      ...prev,
-      workersFee: total > 0 ? total * defaultExpenses.workersFeePerLoad : 0,
-      riversandFee: riverSandLoads > 0 ? riverSandLoads * defaultExpenses.riversandFeePerLoad : 0,
-    }))
-    setComputed(false)
+    setLoads(loads.filter((_, i) => i !== idx))
   }
 
-  const handleCompute = () => {
-    const total = loads.reduce((s, l) => s + l.numberOfLoads, 0)
-    const riverSandLoads = loads.filter(l => l.loadType === 'riversand').reduce((s, l) => s + l.numberOfLoads, 0)
-    const updatedExpenses = {
+  const handleLoadTypeChange = (lt: LoadType) => {
+    const price = loadPrices[lt] ?? 0
+    setLoadForm({ ...loadForm, loadType: lt, loadTypeLabel: LOAD_LABELS[lt], ratePerLoad: price })
+  }
+
+  // Auto-compute expenses based on loads
+  const autoExpenses = {
+    workersFee: loads.reduce((s, l) => s + l.numberOfLoads, 0) * defaultExp.workersFeePerLoad,
+    riversandFee: loads.filter(l => l.loadType === 'riversand').reduce((s, l) => s + l.numberOfLoads, 0) * defaultExp.riversandFeePerLoad,
+  }
+
+  const computed = computeRecord(loads, {
+    ...expenses,
+    workersFee: expenses.workersFee || autoExpenses.workersFee,
+    riversandFee: expenses.riversandFee || autoExpenses.riversandFee,
+  })
+
+  const handleSaveRecord = async () => {
+    setSaving(true)
+    const finalExpenses = {
       ...expenses,
-      workersFee: total > 0 ? total * defaultExpenses.workersFeePerLoad : 0,
-      riversandFee: riverSandLoads > 0 ? riverSandLoads * defaultExpenses.riversandFeePerLoad : 0,
+      workersFee: expenses.workersFee || autoExpenses.workersFee,
+      riversandFee: expenses.riversandFee || autoExpenses.riversandFee,
     }
-    const result = computeRecord(loads, updatedExpenses)
-    setComputedResult(result)
-    setExpenses(updatedExpenses)
-    setComputed(true)
-  }
-
-  const handleSave = () => {
-    if (!computed) { 
-      alert('Please compute the record first.')
-      return 
-    }
-    const user = store.getCurrentUser()
     const record: DailyRecord = {
-      id: editingRecord?.id ?? Math.random().toString(36).slice(2),
+      id: editingRecordId || crypto.randomUUID(),
       date: selectedDate,
       loads,
-      expenses,
-      ...computedResult,
+      expenses: finalExpenses,
+      ...computeRecord(loads, finalExpenses),
       savedAt: new Date().toISOString(),
-      savedBy: user?.username ?? 'admin',
+      savedBy: profile?.username ?? 'admin',
     }
-    store.saveRecord(record)
-    setRecords(store.getRecords())
-    setSaved(true)
-    // Clear form after successful save
-    setTimeout(() => {
-      setSaved(false)
-      setShowForm(false)
-      setEditingRecord(null)
-      setLoads([newLoad(trucks)])
-      setExpenses(newExpense())
-      setComputed(false)
-    }, 1200)
+    await db.saveRecord(record)
+    toast({ title: 'Record saved to cloud' })
+    const updatedRecords = await db.getRecords()
+    setRecords(updatedRecords)
+    setSaving(false)
   }
 
-  const handleSaveAndCompute = () => {
-    handleCompute()
-    // Give a tiny delay for state updates, then save
-    setTimeout(() => {
-      const total = loads.reduce((s, l) => s + l.numberOfLoads, 0)
-      const riverSandLoads = loads.filter(l => l.loadType === 'riversand').reduce((s, l) => s + l.numberOfLoads, 0)
-      const updatedExpenses = {
-        ...expenses,
-        workersFee: total > 0 ? total * defaultExpenses.workersFeePerLoad : 0,
-        riversandFee: riverSandLoads > 0 ? riverSandLoads * defaultExpenses.riversandFeePerLoad : 0,
-      }
-      const result = computeRecord(loads, updatedExpenses)
-      const user = store.getCurrentUser()
-      const record: DailyRecord = {
-        id: editingRecord?.id ?? Math.random().toString(36).slice(2),
-        date: selectedDate,
-        loads,
-        expenses: updatedExpenses,
-        ...result,
-        savedAt: new Date().toISOString(),
-        savedBy: user?.username ?? 'admin',
-      }
-      store.saveRecord(record)
-      setRecords(store.getRecords())
-      setSaved(true)
-      setComputed(true)
-      setComputedResult(result)
-      // Clear form after save
-      setTimeout(() => {
-        setSaved(false)
-        setShowForm(false)
-        setEditingRecord(null)
-        setLoads([newLoad(trucks)])
-        setExpenses(newExpense())
-        setComputed(false)
-      }, 1200)
-    }, 50)
-  }
-
-  const handleNewRecord = () => {
-    setShowForm(!showForm)
-    setEditingRecord(null)
-    setLoads([newLoad(trucks)])
-    setExpenses(newExpense())
-    setComputed(false)
-  }
-
-  const handleEdit = (record: DailyRecord) => {
-    setEditingRecord(record)
-    setLoads(record.loads)
-    setExpenses(record.expenses)
-    setSelectedDate(record.date)
-    setShowForm(true)
-    setComputed(false)
-    setSaved(false)
-  }
-
-  const handleDelete = (id: string) => {
+  const handleDeleteRecord = async (id: string) => {
     if (!confirm('Delete this record permanently?')) return
-    store.deleteRecord(id)
-    setRecords(store.getRecords())
+    await db.deleteRecord(id)
+    toast({ title: 'Record deleted' })
+    const updatedRecords = await db.getRecords()
+    setRecords(updatedRecords)
   }
 
-  const handlePrint = (record: DailyRecord) => {
-    const win = window.open('', '_blank')
-    if (!win) return
-    win.document.write(`<html><head><title>Bhadhara Transport — ${record.date}</title>
-    <style>body{font-family:sans-serif;padding:20px;color:#111}table{width:100%;border-collapse:collapse;margin-bottom:20px}
-    th,td{border:1px solid #ccc;padding:8px;text-align:left}th{background:#f5f5f5}
-    .total{font-weight:bold}.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
-    </style></head><body>
-    <div class="header"><div><h2>Bhadhara Transport</h2><p>Daily Transaction Report — ${record.date}</p></div>
-    <div><p>Saved by: ${record.savedBy}</p><p>${record.savedAt ? format(parseISO(record.savedAt), 'dd/MM/yyyy HH:mm') : ''}</p></div></div>
-    <table><thead><tr><th>#</th><th>Customer</th><th>Driver</th><th>Truck</th><th>Load Type</th><th>Loads</th><th>Rate</th><th>Gross</th><th>Status</th><th>Paid</th></tr></thead>
-    <tbody>${record.loads.map((l, i) => `<tr><td>${i + 1}</td><td>${l.customerName}</td><td>${l.driverName}</td><td>${l.truckPlate}</td><td>${l.loadTypeLabel}</td><td>${l.numberOfLoads}</td><td>$${l.ratePerLoad}</td><td>$${l.ratePerLoad * l.numberOfLoads}</td><td>${l.paymentStatus}</td><td>$${l.amountPaid}</td></tr>`).join('')}
-    </tbody></table>
-    <h3>Expenses</h3><table><tbody>
-    <tr><td>Workers Fee</td><td>$${record.expenses.workersFee}</td></tr>
-    <tr><td>Riversand Fee</td><td>$${record.expenses.riversandFee}</td></tr>
-    <tr><td>Tyres</td><td>$${record.expenses.tyres}</td></tr>
-    <tr><td>Welding</td><td>$${record.expenses.welding}</td></tr>
-    <tr><td>Other</td><td>$${record.expenses.other}</td></tr>
-    </tbody></table>
-    <table><tbody>
-    <tr class="total"><td>Gross Revenue</td><td>$${record.grossRevenue}</td></tr>
-    <tr class="total"><td>Total Expenses</td><td>$${record.totalExpenses}</td></tr>
-    <tr class="total"><td>Net Revenue</td><td>$${record.netRevenue}</td></tr>
-    </tbody></table>
-    <p style="text-align:center;color:#888;font-size:12px">Bhadhara Transport &mdash; 0773 083 687 | 0774 049 526 | 0770 083 687</p>
-    </body></html>`)
-    win.document.close()
-    win.print()
+  if (loading) {
+    return <div className="space-y-4"><Skeleton className="h-8 w-48" /><Skeleton className="h-96" /></div>
   }
 
   return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Daily Transactions</h1>
-          <p className="text-sm text-muted-foreground mt-1">Record, manage and print daily load transactions</p>
-        </div>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <h1 className="text-2xl font-bold">Daily Transactions</h1>
         <div className="flex items-center gap-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="Search records..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="bg-input border border-border rounded-lg pl-10 pr-4 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 w-52"
-            />
-          </div>
-          <select
-            value={paymentFilter}
-            onChange={e => setPaymentFilter(e.target.value as typeof paymentFilter)}
-            className="bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-          >
-            <option value="all">All Transactions</option>
-            <option value="paid">Paid Only</option>
-            <option value="unpaid">Unpaid Only</option>
-          </select>
-          <button
-            onClick={() => setEditingExpenses(!editingExpenses)}
-            className="p-2 border border-border rounded-lg text-muted-foreground hover:text-primary hover:border-primary transition-colors"
-            title="Edit default expense rates"
-          >
-            <Settings className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => handleNewRecord()}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity"
-          >
-            <Plus className="w-4 h-4" />
-            New Record
-          </button>
+          <Calendar className="h-4 w-4 text-muted-foreground" />
+          <Input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="w-44" />
         </div>
       </div>
 
-      {/* Date Browser */}
-      <div className="flex items-center gap-3 mb-6">
-        <CalendarDays className="w-4 h-4 text-primary" />
-        <input
-          type="date"
-          value={selectedDate}
-          onChange={e => setSelectedDate(e.target.value)}
-          className="bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-        />
-        {dateRecord && (
-          <span className="text-sm text-muted-foreground">
-            Record found — {dateRecord.loads.length} loads · Net ${dateRecord.netRevenue.toFixed(2)}
-          </span>
-        )}
-      </div>
+      <Tabs defaultValue="record">
+        <TabsList>
+          <TabsTrigger value="record">Today&apos;s Record</TabsTrigger>
+          <TabsTrigger value="history">Past Records ({records.length})</TabsTrigger>
+        </TabsList>
 
-      {/* ── Expense Settings Modal ─────────────────────────────────────────── */}
-      {editingExpenses && (
-        <div className="bg-card border border-border rounded-2xl p-6 mb-8 space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-foreground">Settings</h2>
-            <button onClick={() => setEditingExpenses(false)} className="text-muted-foreground hover:text-foreground">
-              ✕
-            </button>
-          </div>
-
-          {/* Default Expense Rates */}
-          <div className="space-y-4">
-            <h3 className="font-semibold text-foreground">Default Expense Rates</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Workers Fee Per Load ($)</label>
-                <input
-                  type="number"
-                  min={0}
-                  step={0.5}
-                  value={defaultExpenses.workersFeePerLoad}
-                  onChange={e => setDefaultExpenses(prev => ({ ...prev, workersFeePerLoad: Number(e.target.value) }))}
-                  className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Riversand Fee Per Load ($)</label>
-                <input
-                  type="number"
-                  min={0}
-                  step={0.5}
-                  value={defaultExpenses.riversandFeePerLoad}
-                  onChange={e => setDefaultExpenses(prev => ({ ...prev, riversandFeePerLoad: Number(e.target.value) }))}
-                  className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                />
-              </div>
-            </div>
-            <button
-              onClick={() => {
-                store.saveDefaultExpenses(defaultExpenses)
-                setSaved(true)
-                setTimeout(() => setSaved(false), 1500)
-              }}
-              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity"
-            >
-              Save Expense Rates
-            </button>
-          </div>
-
-          {/* Load Prices */}
-          <div className="space-y-4 border-t border-border pt-6">
-            <h3 className="font-semibold text-foreground">Load Prices</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {(
-                ['riversand', 'pitsand', 'quarrystone', 'gravel'] as (keyof LoadPrices)[]
-              ).map(type => (
-                <div key={type}>
-                  <label className="text-xs text-muted-foreground mb-1 block capitalize">
-                    {type === 'riversand' ? 'River Sand' : type === 'pitsand' ? 'Pit Sand' : type === 'quarrystone' ? 'Quarry Stone' : 'Gravel'} Price Per Load ($)
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    step={0.5}
-                    value={loadPrices[type]}
-                    onChange={e => setLoadPrices(prev => ({ ...prev, [type]: Number(e.target.value) }))}
-                    className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  />
+        <TabsContent value="record" className="space-y-6">
+          {/* Loads Table */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-lg">Loads for {format(new Date(selectedDate + 'T12:00:00'), 'dd MMM yyyy')}</CardTitle>
+              <Button size="sm" className="bg-amber-600 hover:bg-amber-700" onClick={openAddLoad}>
+                <Plus className="h-4 w-4 mr-1" /> Add Load
+              </Button>
+            </CardHeader>
+            <CardContent className="p-0">
+              {loads.length === 0 ? (
+                <p className="text-sm text-muted-foreground p-6 text-center">No loads added yet. Click &quot;Add Load&quot; to start.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Customer</TableHead>
+                        <TableHead>Driver</TableHead>
+                        <TableHead>Truck</TableHead>
+                        <TableHead>Qty</TableHead>
+                        <TableHead>Rate</TableHead>
+                        <TableHead>Total</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {loads.map((l, i) => (
+                        <TableRow key={l.id}>
+                          <TableCell>{l.loadTypeLabel}</TableCell>
+                          <TableCell>{l.customerName || '-'}</TableCell>
+                          <TableCell>{l.driverName}</TableCell>
+                          <TableCell>{l.truckPlate}</TableCell>
+                          <TableCell>{l.numberOfLoads}</TableCell>
+                          <TableCell>${l.ratePerLoad}</TableCell>
+                          <TableCell className="font-semibold">${l.ratePerLoad * l.numberOfLoads}</TableCell>
+                          <TableCell>
+                            <Badge variant={l.paymentStatus === 'paid' ? 'default' : 'outline'}>
+                              {l.paymentStatus}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="space-x-1">
+                            <Button variant="ghost" size="icon" onClick={() => openEditLoad(i)}>
+                              <Save className="h-3 w-3" />
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => removeLoad(i)} className="text-red-600">
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </div>
-              ))}
-            </div>
-            <button
-              onClick={() => {
-                store.saveLoadPrices(loadPrices)
-                setSaved(true)
-                setTimeout(() => setSaved(false), 1500)
-              }}
-              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity"
-            >
-              Save Load Prices
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── New / Edit Form ─────────────────────────────────────────────── */}
-      {showForm && (
-        <div className="bg-card border border-border rounded-2xl p-6 mb-8 space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-foreground">
-              {editingRecord ? `Edit Record — ${editingRecord.date}` : `New Record — ${selectedDate}`}
-            </h2>
-            <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={e => setSelectedDate(e.target.value)}
-                className="bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-              />
-            </div>
-          </div>
-
-          {/* Loads */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-foreground">Loads</h3>
-              <button onClick={addLoad} className="flex items-center gap-1.5 text-sm text-primary hover:text-primary/80 transition-colors">
-                <Plus className="w-4 h-4" /> Add Load
-              </button>
-            </div>
-            <div className="space-y-3">
-              {loads.map((load, idx) => (
-                <div key={load.id} className="border border-border rounded-xl p-4 bg-secondary/20 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Load #{idx + 1}</span>
-                    {loads.length > 1 && (
-                      <button onClick={() => removeLoad(idx)} className="text-destructive hover:text-destructive/80 text-xs flex items-center gap-1">
-                        <Trash2 className="w-3.5 h-3.5" /> Remove
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                    {/* Customer */}
-                    <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">Customer Name</label>
-                      <input
-                        type="text"
-                        placeholder="Enter customer name"
-                        value={load.customerName}
-                        onChange={e => updateLoad(idx, { customerName: e.target.value })}
-                        className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                      />
-                    </div>
-
-                    {/* Driver */}
-                    <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">Driver</label>
-                      <select
-                        value={load.driverName}
-                        onChange={e => updateLoad(idx, { driverName: e.target.value })}
-                        className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                      >
-                        {DRIVERS.map(d => <option key={d} value={d}>{d}</option>)}
-                      </select>
-                    </div>
-
-                    {/* Truck */}
-                    <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">Truck Plate</label>
-                      <input
-                        type="text"
-                        value={load.truckPlate}
-                        onChange={e => updateLoad(idx, { truckPlate: e.target.value })}
-                        className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 font-mono"
-                      />
-                    </div>
-
-                    {/* Load Type */}
-                    <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">Load Type</label>
-                      <select
-                        value={load.loadType}
-                        onChange={e => updateLoad(idx, { loadType: e.target.value as LoadType })}
-                        className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                      >
-                        <option value="riversand">River Sand — ${loadPrices.riversand}/load</option>
-                        <option value="pitsand">Pit Sand — ${loadPrices.pitsand}/load</option>
-                        <option value="quarrystone">Quarry Stone — ${loadPrices.quarrystone}/load</option>
-                        <option value="gravel">Gravel — ${loadPrices.gravel}/load</option>
-                        <option value="other">Other (custom rate)</option>
-                      </select>
-                    </div>
-
-                    {/* Custom rate */}
-                    {load.loadType === 'other' && (
-                      <div>
-                        <label className="text-xs text-muted-foreground mb-1 block">Custom Rate ($)</label>
-                        <input
-                          type="number"
-                          min={0}
-                          value={load.ratePerLoad}
-                          onChange={e => updateLoad(idx, { ratePerLoad: Number(e.target.value) })}
-                          className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                        />
-                      </div>
-                    )}
-
-                    {/* Number of loads */}
-                    <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">Number of Loads</label>
-                      <input
-                        type="number"
-                        min={1}
-                        value={load.numberOfLoads}
-                        onChange={e => updateLoad(idx, { numberOfLoads: Number(e.target.value) })}
-                        className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                      />
-                    </div>
-
-                    {/* Subtotal */}
-                    <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">Subtotal</label>
-                      <div className="bg-muted/30 border border-border rounded-lg px-3 py-2 text-sm font-bold text-primary">
-                        ${(load.ratePerLoad * load.numberOfLoads).toFixed(2)}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Payment */}
-                  <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-border">
-                    <span className="text-xs text-muted-foreground font-semibold">Payment:</span>
-                    <button
-                      onClick={() => updateLoad(idx, { paymentStatus: load.paymentStatus === 'paid' ? 'unpaid' : 'paid' })}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                        load.paymentStatus === 'paid'
-                          ? 'bg-green-400/15 text-green-400 border border-green-400/30'
-                          : 'bg-destructive/10 text-destructive border border-destructive/30'
-                      }`}
-                    >
-                      {load.paymentStatus === 'paid' ? <CheckCircle className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
-                      {load.paymentStatus === 'paid' ? 'Paid' : 'Unpaid'}
-                    </button>
-
-                    {load.paymentStatus === 'paid' && (
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {PAID_PRESETS.map(preset => (
-                          <button
-                            key={preset}
-                            onClick={() => updateLoad(idx, { amountPaid: preset })}
-                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors ${
-                              load.amountPaid === preset
-                                ? 'bg-primary text-primary-foreground border-primary'
-                                : 'border-border text-muted-foreground hover:border-primary hover:text-primary'
-                            }`}
-                          >
-                            ${preset}
-                          </button>
-                        ))}
-                        <input
-                          type="number"
-                          placeholder="Custom $"
-                          min={0}
-                          value={load.amountPaid || ''}
-                          onChange={e => updateLoad(idx, { amountPaid: Number(e.target.value) })}
-                          className="w-24 bg-input border border-border rounded-lg px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                        />
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Expenses */}
-          <div>
-            <h3 className="font-semibold text-foreground mb-3">Expenses</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-              {(
-                [
-                  { key: 'workersFee', label: 'Workers Fee', hint: `Auto: $${loads.reduce((s, l) => s + l.numberOfLoads, 0) * defaultExpenses.workersFeePerLoad} ($${defaultExpenses.workersFeePerLoad}/load)`, auto: true },
-                  { key: 'riversandFee', label: 'Riversand Fee', hint: `Auto: $${loads.filter(l => l.loadType === 'riversand').reduce((s, l) => s + l.numberOfLoads, 0) * defaultExpenses.riversandFeePerLoad} ($${defaultExpenses.riversandFeePerLoad}/load)`, auto: true },
-                  { key: 'tyres', label: 'Tyres', hint: '', auto: false },
-                  { key: 'welding', label: 'Welding', hint: '', auto: false },
-                  { key: 'other', label: 'Other', hint: '', auto: false },
-                ] as { key: keyof Expense; label: string; hint: string; auto: boolean }[]
-              ).map(exp => {
-                const isWorkersFee = exp.key === 'workersFee'
-                const isRiversandFee = exp.key === 'riversandFee'
-                const totalLoads = loads.reduce((s, l) => s + l.numberOfLoads, 0)
-                const riverSandLoads = loads.filter(l => l.loadType === 'riversand').reduce((s, l) => s + l.numberOfLoads, 0)
-                const shouldAutoCheck = (isWorkersFee && totalLoads > 0) || (isRiversandFee && riverSandLoads > 0)
-                const isChecked = shouldAutoCheck || expenseChecks[exp.key as keyof typeof expenseChecks]
-                
-                return (
-                  <div key={exp.key} className="flex flex-col gap-1">
-                    <label className={`flex items-center gap-2 text-xs ${(isWorkersFee || isRiversandFee) ? '' : 'cursor-pointer'}`}>
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={e => {
-                          if (!isWorkersFee && !isRiversandFee) {
-                            setExpenseChecks(prev => ({ ...prev, [exp.key]: e.target.checked }))
-                          }
-                        }}
-                        disabled={isWorkersFee || isRiversandFee}
-                        className={`accent-primary ${(isWorkersFee || isRiversandFee) ? 'cursor-not-allowed' : ''}`}
-                      />
-                      <span className={`${isChecked ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
-                        {exp.label}
-                        {(isWorkersFee || isRiversandFee) && shouldAutoCheck && <span className="text-primary text-xs ml-1">(Auto-locked)</span>}
-                      </span>
-                    </label>
-                    {isChecked && (
-                      <div>
-                        <input
-                          type="number"
-                          min={0}
-                          value={expenses[exp.key]}
-                          onChange={e => {
-                            if (!isWorkersFee && !isRiversandFee) {
-                              setExpenses(prev => ({ ...prev, [exp.key]: Number(e.target.value) }))
-                            }
-                          }}
-                          disabled={isWorkersFee || isRiversandFee}
-                          placeholder="Amount ($)"
-                          className={`w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 ${(isWorkersFee || isRiversandFee) ? 'opacity-60 cursor-not-allowed' : ''}`}
-                        />
-                        {exp.hint && <p className="text-xs text-muted-foreground mt-0.5">{exp.hint}</p>}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* Computed result */}
-          {computed && (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-4 bg-secondary/30 rounded-xl border border-border">
-              <div>
-                <p className="text-xs text-muted-foreground">Gross Revenue</p>
-                <p className="text-lg font-bold text-foreground">${computedResult.grossRevenue.toFixed(2)}</p>
+          <Card>
+            <CardHeader><CardTitle className="text-lg">Expenses</CardTitle></CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <div><Label>Workers Fee</Label><Input type="number" value={expenses.workersFee || autoExpenses.workersFee} onChange={e => setExpenses({ ...expenses, workersFee: Number(e.target.value) })} /></div>
+                <div><Label>Riversand Fee</Label><Input type="number" value={expenses.riversandFee || autoExpenses.riversandFee} onChange={e => setExpenses({ ...expenses, riversandFee: Number(e.target.value) })} /></div>
+                <div><Label>Tyres</Label><Input type="number" value={expenses.tyres} onChange={e => setExpenses({ ...expenses, tyres: Number(e.target.value) })} /></div>
+                <div><Label>Welding</Label><Input type="number" value={expenses.welding} onChange={e => setExpenses({ ...expenses, welding: Number(e.target.value) })} /></div>
+                <div><Label>Other</Label><Input type="number" value={expenses.other} onChange={e => setExpenses({ ...expenses, other: Number(e.target.value) })} /></div>
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Total Expenses</p>
-                <p className="text-lg font-bold text-destructive">${computedResult.totalExpenses.toFixed(2)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Net Revenue</p>
-                <p className={`text-lg font-bold ${computedResult.netRevenue >= 0 ? 'text-green-400' : 'text-destructive'}`}>
-                  ${computedResult.netRevenue.toFixed(2)}
-                </p>
-              </div>
-            </div>
-          )}
+            </CardContent>
+          </Card>
 
-          {/* Actions */}
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              onClick={handleSaveAndCompute}
-              className="flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity"
-            >
-              <Save className="w-4 h-4" />
-              {saved ? 'Saved!' : 'Save & Compute'}
-            </button>
-            <button
-              onClick={() => { setShowForm(false); setEditingRecord(null); setComputed(false) }}
-              className="px-5 py-2.5 border border-border text-muted-foreground rounded-lg text-sm hover:border-primary hover:text-foreground transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── Records List ─────────────────────────────────────────────────── */}
-      <div className="space-y-4">
-        {filteredRecords.length === 0 ? (
-          <div className="bg-card border border-border rounded-2xl p-12 text-center">
-            <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-            <p className="text-muted-foreground">No records found. Click &quot;New Record&quot; to start recording transactions.</p>
-          </div>
-        ) : (
-          filteredRecords.map(record => (
-            <div key={record.id} className="bg-card border border-border rounded-2xl overflow-hidden">
-              {/* Record header */}
-              <div className="flex flex-wrap items-center justify-between p-5 gap-3">
-                <div>
-                  <p className="font-bold text-foreground">{format(new Date(record.date + 'T12:00:00'), 'EEEE, d MMMM yyyy')}</p>
-                  <p className="text-sm text-muted-foreground mt-0.5">
-                    {record.loads.length} loads · Gross ${record.grossRevenue} · Expenses ${record.totalExpenses}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={`text-lg font-bold ${record.netRevenue >= 0 ? 'text-green-400' : 'text-destructive'}`}>
-                    Net ${record.netRevenue.toFixed(2)}
-                  </span>
-                  <button
-                    onClick={() => handleEdit(record)}
-                    className="p-2 text-muted-foreground hover:text-foreground border border-border rounded-lg hover:border-primary transition-colors"
-                    title="Edit"
-                  >
-                    <Edit3 className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handlePrint(record)}
-                    className="p-2 text-muted-foreground hover:text-foreground border border-border rounded-lg hover:border-primary transition-colors"
-                    title="Print"
-                  >
-                    <Printer className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(record.id)}
-                    className="p-2 text-muted-foreground hover:text-destructive border border-border rounded-lg hover:border-destructive/50 transition-colors"
-                    title="Delete"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+          {/* Summary & Save */}
+          <Card>
+            <CardContent className="pt-6">
+              <div className="grid grid-cols-3 gap-4 text-center mb-4">
+                <div><p className="text-sm text-muted-foreground">Gross Revenue</p><p className="text-xl font-bold text-green-600">${computed.grossRevenue}</p></div>
+                <div><p className="text-sm text-muted-foreground">Total Expenses</p><p className="text-xl font-bold text-red-600">${computed.totalExpenses}</p></div>
+                <div><p className="text-sm text-muted-foreground">Net Revenue</p><p className="text-xl font-bold">${computed.netRevenue}</p></div>
               </div>
+              <Button className="w-full bg-amber-600 hover:bg-amber-700" onClick={handleSaveRecord} disabled={saving || loads.length === 0}>
+                {saving ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</> : <><Save className="h-4 w-4 mr-2" /> Save Record to Cloud</>}
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-              {/* Load rows */}
-              <div className="border-t border-border overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-secondary/30">
-                      <th className="text-left px-4 py-2 text-xs text-muted-foreground font-semibold">Customer</th>
-                      <th className="text-left px-4 py-2 text-xs text-muted-foreground font-semibold">Driver</th>
-                      <th className="text-left px-4 py-2 text-xs text-muted-foreground font-semibold">Truck</th>
-                      <th className="text-left px-4 py-2 text-xs text-muted-foreground font-semibold">Load</th>
-                      <th className="text-right px-4 py-2 text-xs text-muted-foreground font-semibold">Loads</th>
-                      <th className="text-right px-4 py-2 text-xs text-muted-foreground font-semibold">Gross</th>
-                      <th className="text-center px-4 py-2 text-xs text-muted-foreground font-semibold">Status</th>
-                      <th className="text-right px-4 py-2 text-xs text-muted-foreground font-semibold">Paid</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {record.loads.map((load, i) => (
-                      <tr key={load.id} className={i % 2 === 0 ? '' : 'bg-secondary/10'}>
-                        <td className="px-4 py-2 text-foreground">{load.customerName || '—'}</td>
-                        <td className="px-4 py-2 text-foreground">{load.driverName}</td>
-                        <td className="px-4 py-2 font-mono text-xs text-muted-foreground">{load.truckPlate}</td>
-                        <td className="px-4 py-2 text-foreground">{load.loadTypeLabel}</td>
-                        <td className="px-4 py-2 text-right text-foreground">{load.numberOfLoads}</td>
-                        <td className="px-4 py-2 text-right font-semibold text-foreground">${load.ratePerLoad * load.numberOfLoads}</td>
-                        <td className="px-4 py-2 text-center">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                            load.paymentStatus === 'paid'
-                              ? 'bg-green-400/10 text-green-400'
-                              : 'bg-destructive/10 text-destructive'
-                          }`}>
-                            {load.paymentStatus}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2 text-right text-foreground">${load.amountPaid}</td>
-                      </tr>
+        <TabsContent value="history">
+          <Card>
+            <CardContent className="p-0">
+              {records.length === 0 ? (
+                <p className="text-sm text-muted-foreground p-6 text-center">No records saved yet.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Loads</TableHead>
+                      <TableHead>Gross</TableHead>
+                      <TableHead>Expenses</TableHead>
+                      <TableHead>Net</TableHead>
+                      <TableHead>Saved By</TableHead>
+                      <TableHead></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {records.map(r => (
+                      <TableRow key={r.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedDate(r.date)}>
+                        <TableCell className="font-medium">{format(new Date(r.date + 'T12:00:00'), 'dd MMM yyyy')}</TableCell>
+                        <TableCell>{r.loads.length}</TableCell>
+                        <TableCell className="text-green-600">${r.grossRevenue}</TableCell>
+                        <TableCell className="text-red-600">${r.totalExpenses}</TableCell>
+                        <TableCell className="font-semibold">${r.netRevenue}</TableCell>
+                        <TableCell>{r.savedBy}</TableCell>
+                        <TableCell>
+                          <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleDeleteRecord(r.id) }} className="text-red-600">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* Add/Edit Load Dialog */}
+      <Dialog open={loadDialogOpen} onOpenChange={setLoadDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>{editLoadIdx !== null ? 'Edit Load' : 'Add Load'}</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Load Type</Label>
+                <Select value={loadForm.loadType} onValueChange={v => handleLoadTypeChange(v as LoadType)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(LOAD_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div><Label>Rate/Load ($)</Label><Input type="number" value={loadForm.ratePerLoad} onChange={e => setLoadForm({ ...loadForm, ratePerLoad: Number(e.target.value) })} /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Number of Loads</Label><Input type="number" min={1} value={loadForm.numberOfLoads} onChange={e => setLoadForm({ ...loadForm, numberOfLoads: Number(e.target.value) })} /></div>
+              <div><Label>Customer Name</Label><Input value={loadForm.customerName} onChange={e => setLoadForm({ ...loadForm, customerName: e.target.value })} /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Driver</Label>
+                <Select value={loadForm.driverName} onValueChange={v => setLoadForm({ ...loadForm, driverName: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select driver" /></SelectTrigger>
+                  <SelectContent>
+                    {drivers.map(d => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div><Label>Truck</Label>
+                <Select value={loadForm.truckPlate} onValueChange={v => setLoadForm({ ...loadForm, truckPlate: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select truck" /></SelectTrigger>
+                  <SelectContent>
+                    {activeTrucks.map(t => <SelectItem key={t.id} value={t.plate}>{t.plate}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
-          ))
-        )}
-      </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Payment Status</Label>
+                <Select value={loadForm.paymentStatus} onValueChange={v => setLoadForm({ ...loadForm, paymentStatus: v as PaymentStatus })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="paid">Paid</SelectItem>
+                    <SelectItem value="unpaid">Unpaid</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div><Label>Amount Paid ($)</Label><Input type="number" value={loadForm.amountPaid} onChange={e => setLoadForm({ ...loadForm, amountPaid: Number(e.target.value) })} /></div>
+            </div>
+            <div><Label>Notes</Label><Input value={loadForm.notes ?? ''} onChange={e => setLoadForm({ ...loadForm, notes: e.target.value })} /></div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLoadDialogOpen(false)}>Cancel</Button>
+            <Button className="bg-amber-600 hover:bg-amber-700" onClick={saveLoad}>{editLoadIdx !== null ? 'Update' : 'Add'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
