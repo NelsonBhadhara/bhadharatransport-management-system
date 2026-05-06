@@ -2,6 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { store, Message } from '@/lib/store'
+import { getMessages, sendMessage, markMessagesRead } from '@/lib/supabase/database'
+import { useAuth } from '@/components/auth/AuthProvider'
+import { useRealtimeMessages } from '@/hooks/use-realtime-messages'
 import { format, parseISO } from 'date-fns'
 import { Send, MessageSquare, ChevronRight } from 'lucide-react'
 
@@ -12,45 +15,53 @@ const ADMIN_WA = [
 ]
 
 const GENERAL_WA_MSG = encodeURIComponent(
-  `*BHADHARA TRANSPORT – General Inquiry*\n\nHello, I would like to inquire about your transport services.\n\nPlease advise on availability, pricing, and how to arrange a cash payment meetup.\n\nThank you.`
+  `*BHADHARA TRANSPORT — General Inquiry*\n\nHello, I would like to inquire about your transport services.\n\nPlease advise on availability, pricing, and how to arrange a cash payment meetup.\n\nThank you.`
 )
 
 export default function ClientMessagesPage() {
-  const user = store.getCurrentUser()
-  const [messages, setMessages] = useState<Message[]>([])
+  const { profile } = useAuth()
+  const [initialMessages, setInitialMessages] = useState<Message[]>([])
   const [text, setText] = useState('')
+  const [loading, setLoading] = useState(true)
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  const loadMessages = () => {
-    store.markMessagesRead(user?.username ?? '')
-    const all = store.getMessages()
-    const relevant = all.filter(
-      m => m.fromUser === user?.username || m.toUser === user?.username
-    )
-    setMessages(relevant.sort((a, b) => a.timestamp.localeCompare(b.timestamp)))
-  }
+  const messages = useRealtimeMessages(initialMessages)
 
   useEffect(() => {
-    loadMessages()
-    const interval = setInterval(loadMessages, 3000)
-    return () => clearInterval(interval)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    if (!profile) return
+    async function loadData() {
+      const m = await getMessages(profile.username)
+      setInitialMessages(m)
+      setLoading(false)
+      // Initial mark as read
+      await markMessagesRead(profile.username)
+    }
+    loadData()
+  }, [profile])
+
+  // Mark incoming messages as read in real-time
+  useEffect(() => {
+    if (!profile || loading) return
+    const unread = messages.filter(m => m.toUser === profile.username && !m.read)
+    if (unread.length > 0) {
+      markMessagesRead(profile.username)
+    }
+  }, [messages, profile, loading])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const handleSend = () => {
+  const handleSend = async () => {
     const trimmed = text.trim()
-    if (!trimmed) return
-    store.saveMessage({
-      fromUser: user?.username ?? '',
+    if (!trimmed || !profile) return
+    
+    await sendMessage({
+      fromUser: profile.username,
       toUser: 'admin',
       content: trimmed,
     })
     setText('')
-    setTimeout(loadMessages, 100)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -59,6 +70,8 @@ export default function ClientMessagesPage() {
       handleSend()
     }
   }
+
+  if (loading) return <div className="p-8 text-center text-muted-foreground animate-pulse">Loading messages...</div>
 
   return (
     <div className="flex flex-col h-[calc(100vh-80px)] max-w-2xl mx-auto">
@@ -113,7 +126,7 @@ export default function ClientMessagesPage() {
           )}
 
           {messages.map(msg => {
-            const isMe = msg.fromUser === user?.username
+            const isMe = msg.fromUser === profile?.username
             return (
               <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
                 <div
@@ -129,7 +142,7 @@ export default function ClientMessagesPage() {
                       isMe ? 'text-primary-foreground/60 text-right' : 'text-muted-foreground'
                     }`}
                   >
-                    {format(parseISO(msg.timestamp), 'HH:mm · d MMM')}
+                    {format(parseISO(msg.timestamp), 'HH:mm • d MMM')}
                   </p>
                 </div>
               </div>
