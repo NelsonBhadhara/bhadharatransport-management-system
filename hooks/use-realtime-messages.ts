@@ -21,6 +21,8 @@ export function useRealtimeMessages(initialMessages: Message[] = [], username?: 
       ? `realtime:messages:${username}`
       : 'realtime:messages:all'
 
+    console.log(`[Realtime] Subscribing to channel: ${channelName}`)
+
     const channel = supabase
       .channel(channelName)
       .on(
@@ -31,6 +33,7 @@ export function useRealtimeMessages(initialMessages: Message[] = [], username?: 
           table: 'messages',
         },
         (payload) => {
+          console.log('[Realtime] Event received:', payload.eventType, payload)
           if (payload.eventType === 'INSERT') {
             const newMessage: Message = {
               id: payload.new.id,
@@ -73,9 +76,15 @@ export function useRealtimeMessages(initialMessages: Message[] = [], username?: 
           }
         }
       )
-      .subscribe()
+      .subscribe((status, err) => {
+        console.log(`[Realtime] Status for ${channelName}:`, status)
+        if (err) {
+          console.error(`[Realtime] Subscription error for ${channelName}:`, err)
+        }
+      })
 
     return () => {
+      console.log(`[Realtime] Unsubscribing from ${channelName}`)
       supabase.removeChannel(channel)
     }
     // username is the only real dependency; supabaseRef is stable
