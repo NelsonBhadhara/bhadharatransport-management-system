@@ -18,7 +18,8 @@ export default function AdminMessagesPage() {
   const [loading, setLoading] = useState(true)
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  const messages = useRealtimeMessages(initialMessages)
+  // Pass selectedUser so the hook only processes messages relevant to this thread
+  const { messages, appendMessage } = useRealtimeMessages(initialMessages, selectedUser ?? undefined)
 
   useEffect(() => {
     async function loadProfiles() {
@@ -58,12 +59,17 @@ export default function AdminMessagesPage() {
     const trimmed = text.trim()
     if (!trimmed || !selectedUser) return
     
-    await sendMessage({
+    const sent = await sendMessage({
       fromUser: 'admin',
       toUser: selectedUser,
       content: trimmed,
     })
     setText('')
+
+    // Optimistically append so the message appears instantly
+    if (sent) {
+      appendMessage(sent)
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

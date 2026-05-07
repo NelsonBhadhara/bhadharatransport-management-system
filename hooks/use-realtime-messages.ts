@@ -1,24 +1,32 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Message } from '@/lib/store'
 
-export function useRealtimeMessages(initialMessages: Message[] = []) {
+export function useRealtimeMessages(initialMessages: Message[] = [], username?: string) {
   const [messages, setMessages] = useState<Message[]>(initialMessages)
-  const supabase = createClient()
+  // Use a ref to hold the Supabase client so it's created only once
+  const supabaseRef = useRef(createClient())
 
   useEffect(() => {
     setMessages(initialMessages)
   }, [initialMessages])
 
   useEffect(() => {
+    const supabase = supabaseRef.current
+
+    // Build a unique channel name scoped to this user if provided
+    const channelName = username
+      ? `realtime:messages:${username}`
+      : 'realtime:messages:all'
+
     const channel = supabase
-      .channel('realtime:messages')
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
-          event: '*', // Listen to all events: INSERT, UPDATE, DELETE
+          event: '*',
           schema: 'public',
           table: 'messages',
         },
@@ -32,21 +40,36 @@ export function useRealtimeMessages(initialMessages: Message[] = []) {
               timestamp: payload.new.created_at,
               read: payload.new.read,
             }
-            setMessages((current) => {
-              // Avoid duplicates if we already have it (e.g. from a quick refresh)
-              if (current.some(m => m.id === newMessage.id)) return current
-              return [...current, newMessage]
-            })
+
+            // Only add if this message is relevant to the current conversation
+            if (
+              !username ||
+              newMessage.fromUser === username ||
+              newMessage.toUser === username
+            ) {
+              setMessages((current) => {
+                // Avoid duplicates
+                if (current.some((m) => m.id === newMessage.id)) return current
+                return [...current, newMessage]
+              })
+            }
           } else if (payload.eventType === 'UPDATE') {
-            setMessages((current) => 
-              current.map(m => m.id === payload.new.id ? {
-                ...m,
-                read: payload.new.read,
-                content: payload.new.content, // in case content was edited
-              } : m)
+            setMessages((current) =>
+              current.map((m) =>
+                m.id === payload.new.id
+                  ? {
+                      ...m,
+                      read: payload.new.read,
+                      content: payload.new.content,
+                    }
+                  : m
+              )
             )
           } else if (payload.eventType === 'DELETE') {
-            setMessages((current) => current.filter(m => m.id === payload.old.id))
+            // FIX: was === (kept deleted msg), now !== (removes it)
+            setMessages((current) =>
+              current.filter((m) => m.id !== payload.old.id)
+            )
           }
         }
       )
@@ -55,7 +78,16 @@ export function useRealtimeMessages(initialMessages: Message[] = []) {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [supabase])
+    // username is the only real dependency; supabaseRef is stable
+  }, [username])
 
-  return messages
+  // Optimistic append — call this right after sendMessage() succeeds
+  const appendMessage = useCallback((msg: Message) => {
+    setMessages((current) => {
+      if (current.some((m) => m.id === msg.id)) return current
+      return [...current, msg]
+    })
+  }, [])
+
+  return { messages, appendMessage }
 }

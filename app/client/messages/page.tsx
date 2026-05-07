@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { store, Message } from '@/lib/store'
+import type { Message } from '@/lib/store'
 import { getMessages, sendMessage, markMessagesRead } from '@/lib/supabase/database'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useRealtimeMessages } from '@/hooks/use-realtime-messages'
@@ -25,7 +25,8 @@ export default function ClientMessagesPage() {
   const [loading, setLoading] = useState(true)
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  const messages = useRealtimeMessages(initialMessages)
+  // Pass profile.username so realtime is scoped to this user's conversation
+  const { messages, appendMessage } = useRealtimeMessages(initialMessages, profile?.username)
 
   useEffect(() => {
     if (!profile) return
@@ -56,12 +57,17 @@ export default function ClientMessagesPage() {
     const trimmed = text.trim()
     if (!trimmed || !profile) return
     
-    await sendMessage({
+    const sent = await sendMessage({
       fromUser: profile.username,
       toUser: 'admin',
       content: trimmed,
     })
     setText('')
+
+    // Optimistically append so the message appears instantly
+    if (sent) {
+      appendMessage(sent)
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
