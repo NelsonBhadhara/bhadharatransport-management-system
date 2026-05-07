@@ -18,42 +18,39 @@ export default function AdminMessagesPage() {
   const [loading, setLoading] = useState(true)
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  // Pass selectedUser so the hook only processes messages relevant to this thread
-  const { messages, appendMessage } = useRealtimeMessages(initialMessages, selectedUser ?? undefined)
+  // IMPORTANT: For Admin, we don't pass selectedUser to the hook filter.
+  // This ensures the sidebar stays updated for ALL users while we chat with one.
+  const { messages, appendMessage } = useRealtimeMessages(initialMessages)
 
   useEffect(() => {
-    async function loadProfiles() {
+    async function loadInitialData() {
+      // Load all profiles
       const p = await getProfiles()
-      // Filter out self and only show clients/employees
       setProfiles(p.filter(u => u.username !== 'admin'))
+      
+      // Load ALL message history so the sidebar has context for every user
+      const m = await getMessages()
+      setInitialMessages(m)
       setLoading(false)
     }
-    loadProfiles()
+    loadInitialData()
   }, [])
 
+  // Auto-scroll chat window
   useEffect(() => {
-    if (!selectedUser) return
-    async function loadThread() {
-      const m = await getMessages(selectedUser)
-      setInitialMessages(m)
-      // Mark as read when opening thread
-      await markMessagesRead('admin')
+    if (selectedUser) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
-    loadThread()
-  }, [selectedUser])
+  }, [messages, selectedUser])
 
-  // Real-time read receipt handling
+  // Mark unread messages for the selected user
   useEffect(() => {
     if (!selectedUser || loading) return
-    const unread = messages.filter(m => m.toUser === 'admin' && m.fromUser === selectedUser && !m.read)
+    const unread = messages.filter(m => m.fromUser === selectedUser && m.toUser === 'admin' && !m.read)
     if (unread.length > 0) {
       markMessagesRead('admin')
     }
   }, [messages, selectedUser, loading])
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
 
   const handleSend = async () => {
     const trimmed = text.trim()
@@ -66,7 +63,6 @@ export default function AdminMessagesPage() {
     })
     setText('')
 
-    // Optimistically append so the message appears instantly
     if (sent) {
       appendMessage(sent)
     }
@@ -80,8 +76,7 @@ export default function AdminMessagesPage() {
   }
 
   const filteredProfiles = profiles.filter(p => 
-    p.username.toLowerCase().includes(search.toLowerCase()) ||
-    (p.email && p.email.toLowerCase().includes(search.toLowerCase()))
+    p.username.toLowerCase().includes(search.toLowerCase())
   )
 
   if (loading) return <div className="p-8 text-center text-muted-foreground animate-pulse">Loading messenger...</div>
@@ -106,9 +101,11 @@ export default function AdminMessagesPage() {
         
         <div className="flex-1 overflow-y-auto">
           {filteredProfiles.map(p => {
-            const lastMsg = messages.filter(m => m.fromUser === p.username || m.toUser === p.username).pop()
+            // Find the last message for THIS user from the global messages state
+            const userMessages = messages.filter(m => m.fromUser === p.username || m.toUser === p.username)
+            const lastMsg = userMessages[userMessages.length - 1]
             const isSelected = selectedUser === p.username
-            const hasUnread = messages.some(m => m.fromUser === p.username && m.toUser === 'admin' && !m.read)
+            const hasUnread = userMessages.some(m => m.fromUser === p.username && m.toUser === 'admin' && !m.read)
 
             return (
               <button
@@ -161,40 +158,42 @@ export default function AdminMessagesPage() {
                 </div>
                 <div>
                   <p className="font-bold text-foreground">{selectedUser}</p>
-                  <p className="text-xs text-green-400 font-medium">Online</p>
+                  <p className="text-xs text-green-400 font-medium">Chatting</p>
                 </div>
               </div>
             </div>
 
-            {/* Message Thread */}
+            {/* Message Thread - Filtered to the selected user */}
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
-              {messages.filter(m => m.fromUser === selectedUser || m.toUser === selectedUser).map(msg => {
-                const isMe = msg.fromUser === 'admin'
-                return (
-                  <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[70%] group`}>
-                      <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
-                        isMe 
-                          ? 'bg-primary text-primary-foreground rounded-br-sm' 
-                          : 'bg-card border border-border text-foreground rounded-bl-sm'
-                      }`}>
-                        <p>{msg.content}</p>
-                        <div className={`flex items-center gap-1.5 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
-                          <span className={`text-[10px] ${isMe ? 'text-primary-foreground/60' : 'text-muted-foreground'}`}>
-                            {format(parseISO(msg.timestamp), 'HH:mm')}
-                          </span>
-                          {isMe && (
-                            msg.read ? (
-                              <CheckCheck className="w-3 h-3 text-primary-foreground/60" />
-                            ) : (
-                              <Check className="w-3 h-3 text-primary-foreground/60" />
-                            )
-                          )}
+              {messages
+                .filter(m => m.fromUser === selectedUser || m.toUser === selectedUser)
+                .map(msg => {
+                  const isMe = msg.fromUser === 'admin'
+                  return (
+                    <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                      <div className="max-w-[70%]">
+                        <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
+                          isMe 
+                            ? 'bg-primary text-primary-foreground rounded-br-sm' 
+                            : 'bg-card border border-border text-foreground rounded-bl-sm'
+                        }`}>
+                          <p>{msg.content}</p>
+                          <div className={`flex items-center gap-1.5 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                            <span className={`text-[10px] ${isMe ? 'text-primary-foreground/60' : 'text-muted-foreground'}`}>
+                              {format(parseISO(msg.timestamp), 'HH:mm')}
+                            </span>
+                            {isMe && (
+                              msg.read ? (
+                                <CheckCheck className="w-3 h-3 text-primary-foreground/60" />
+                              ) : (
+                                <Check className="w-3 h-3 text-primary-foreground/60" />
+                              )
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                )
+                  )
               })}
               <div ref={bottomRef} />
             </div>
@@ -227,7 +226,7 @@ export default function AdminMessagesPage() {
             </div>
             <h2 className="text-xl font-bold text-foreground">Select a conversation</h2>
             <p className="text-muted-foreground mt-2 max-w-sm">
-              Choose a user from the sidebar to start messaging. You can see their online status and message history.
+              Choose a client from the sidebar to view history and start messaging.
             </p>
           </div>
         )}

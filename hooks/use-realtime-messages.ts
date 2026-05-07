@@ -6,22 +6,22 @@ import type { Message } from '@/lib/store'
 
 export function useRealtimeMessages(initialMessages: Message[] = [], username?: string) {
   const [messages, setMessages] = useState<Message[]>(initialMessages)
-  // Use a ref to hold the Supabase client so it's created only once
   const supabaseRef = useRef(createClient())
 
+  // Update local state when initialMessages (history) is loaded
   useEffect(() => {
     setMessages(initialMessages)
   }, [initialMessages])
 
   useEffect(() => {
     const supabase = supabaseRef.current
-
-    // Build a unique channel name scoped to this user if provided
+    
+    // Admins listen to 'all', clients listen to their own username
     const channelName = username
       ? `realtime:messages:${username}`
-      : 'realtime:messages:all'
+      : 'realtime:messages:admin_global'
 
-    console.log(`[Realtime] Subscribing to channel: ${channelName}`)
+    console.log(`[Realtime] Subscribing to: ${channelName} (Filter User: ${username || 'NONE - ADMIN MODE'})`)
 
     const channel = supabase
       .channel(channelName)
@@ -33,7 +33,8 @@ export function useRealtimeMessages(initialMessages: Message[] = [], username?: 
           table: 'messages',
         },
         (payload) => {
-          console.log('[Realtime] Event received:', payload.eventType, payload)
+          console.log('[Realtime] Payload:', payload.eventType, payload.new?.id)
+          
           if (payload.eventType === 'INSERT') {
             const newMessage: Message = {
               id: payload.new.id,
@@ -44,15 +45,21 @@ export function useRealtimeMessages(initialMessages: Message[] = [], username?: 
               read: payload.new.read,
             }
 
-            // Only add if this message is relevant to the current conversation
-            if (
-              !username ||
-              newMessage.fromUser === username ||
-              newMessage.toUser === username
-            ) {
+            // Logic: 
+            // 1. If no username filter (Admin), accept everything.
+            // 2. If username filter (Client), only accept if it involves them.
+            const isRelevant = !username || 
+                               newMessage.fromUser === username || 
+                               newMessage.toUser === username
+
+            if (isRelevant) {
               setMessages((current) => {
-                // Avoid duplicates
-                if (current.some((m) => m.id === newMessage.id)) return current
+                // STRICT DUPLICATE CHECK: Use ID to prevent "similar message" double-ups
+                const exists = current.some((m) => m.id === newMessage.id)
+                if (exists) {
+                  console.log('[Realtime] Duplicate blocked:', newMessage.id)
+                  return current
+                }
                 return [...current, newMessage]
               })
             }
@@ -69,28 +76,22 @@ export function useRealtimeMessages(initialMessages: Message[] = [], username?: 
               )
             )
           } else if (payload.eventType === 'DELETE') {
-            // FIX: was === (kept deleted msg), now !== (removes it)
             setMessages((current) =>
               current.filter((m) => m.id !== payload.old.id)
             )
           }
         }
       )
-      .subscribe((status, err) => {
-        console.log(`[Realtime] Status for ${channelName}:`, status)
-        if (err) {
-          console.error(`[Realtime] Subscription error for ${channelName}:`, err)
-        }
+      .subscribe((status) => {
+        console.log(`[Realtime] ${channelName} status:`, status)
       })
 
     return () => {
-      console.log(`[Realtime] Unsubscribing from ${channelName}`)
+      console.log(`[Realtime] Cleaning up: ${channelName}`)
       supabase.removeChannel(channel)
     }
-    // username is the only real dependency; supabaseRef is stable
   }, [username])
 
-  // Optimistic append — call this right after sendMessage() succeeds
   const appendMessage = useCallback((msg: Message) => {
     setMessages((current) => {
       if (current.some((m) => m.id === msg.id)) return current
