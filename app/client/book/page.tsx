@@ -96,105 +96,103 @@ export default function BookPage() {
 
   if (submitted) {
     return (
-      <div className="max-w-lg mx-auto">
+      <div className="max-w-lg mx-auto p-4 sm:p-0 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
         {/* Success header */}
-        <div className="flex flex-col items-center text-center gap-3 py-8">
-          <div className="w-16 h-16 bg-green-400/10 rounded-full flex items-center justify-center">
-            <CheckCircle className="w-8 h-8 text-green-400" />
+        <div className="flex flex-col items-center text-center gap-4 py-6">
+          <div className="w-20 h-20 bg-green-400/10 rounded-3xl flex items-center justify-center shadow-xl shadow-green-400/5">
+            <CheckCircle className="w-10 h-10 text-green-400" />
           </div>
-          <h2 className="text-2xl font-bold text-foreground">Booking Submitted!</h2>
-          <p className="text-sm text-muted-foreground max-w-sm">
-            Your booking request is saved. Since all payments are handled in cash, please WhatsApp us now using the
-            button below — your full order details and pricing are pre-filled in the message.
-          </p>
+          <div className="space-y-1">
+             <h2 className="text-3xl font-black text-foreground tracking-tight">Booking Saved!</h2>
+             <p className="text-sm text-muted-foreground max-w-sm text-pretty font-medium">
+               Your booking request is recorded. Since all payments are handled in cash, please WhatsApp us now to finalise your order.
+             </p>
+          </div>
         </div>
 
         {/* Order summary card */}
-        <div className="bg-card border border-border rounded-2xl p-5 mb-5">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Order Summary</p>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Material</span>
-              <span className="text-foreground font-semibold">{LOAD_LABELS[loadType]}</span>
+        <div className="bg-card border border-border rounded-3xl p-6 shadow-sm overflow-hidden relative">
+          <div className="absolute top-0 right-0 p-4 opacity-5">
+             <FileText className="w-20 h-20" />
+          </div>
+          <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-4">Official Order Summary</p>
+          <div className="space-y-4 text-sm">
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground font-medium">Material Type</span>
+              <span className="text-foreground font-black">{LOAD_LABELS[loadType]}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Loads</span>
-              <span className="text-foreground font-semibold">{numberOfLoads}</span>
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground font-medium">Total Loads</span>
+              <span className="text-foreground font-black">{numberOfLoads}</span>
             </div>
             {!isOther && (
               <>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Rate per load</span>
-                  <span className="text-foreground font-semibold">${rate} USD</span>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-medium">Rate per load</span>
+                  <span className="text-foreground font-black">${rate} <span className="text-[10px] opacity-50 uppercase">USD</span></span>
                 </div>
-                <div className="flex justify-between border-t border-border pt-2 mt-2">
-                  <span className="text-muted-foreground font-semibold">Total (cash)</span>
-                  <span className="text-primary font-bold text-base">${estimatedTotal} USD</span>
+                <div className="flex justify-between items-center pt-4 border-t border-border">
+                  <span className="text-muted-foreground font-black uppercase tracking-tighter">Total Due (Cash)</span>
+                  <span className="text-2xl font-black text-primary tracking-tighter">${estimatedTotal} <span className="text-xs">USD</span></span>
                 </div>
               </>
             )}
             {isOther && (
-              <div className="flex justify-between border-t border-border pt-2 mt-2">
-                <span className="text-muted-foreground font-semibold">Total</span>
-                <span className="text-primary font-bold text-base">Custom — discuss via WhatsApp</span>
+              <div className="flex justify-between items-center pt-4 border-t border-border">
+                <span className="text-muted-foreground font-black uppercase tracking-tighter">Estimated Total</span>
+                <span className="text-primary font-black text-sm">Custom Pricing</span>
               </div>
             )}
-            <div className="flex justify-between pt-1">
-              <span className="text-muted-foreground">Preferred date</span>
-              <span className="text-foreground font-semibold">{preferredDate}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Delivery site</span>
-              <span className="text-foreground font-semibold text-right max-w-[55%]">{deliveryAddress}</span>
+            <div className="pt-2 space-y-2">
+               <div className="flex items-center gap-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                  <Calendar className="w-3 h-3" /> Preferred Date: <span className="text-foreground">{preferredDate}</span>
+               </div>
+               <div className="flex items-start gap-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                  <MapPin className="w-3 h-3 mt-0.5" /> Delivery: <span className="text-foreground text-right flex-1">{deliveryAddress}</span>
+               </div>
             </div>
           </div>
         </div>
 
         {/* Payment notice */}
-        <div className="flex gap-3 p-4 bg-orange-400/5 border border-orange-400/20 rounded-xl mb-5">
-          <Info className="w-4 h-4 text-orange-400 shrink-0 mt-0.5" />
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            <span className="font-semibold text-foreground">Cash payment only.</span> No online payments are processed.
-            WhatsApp our team and they will reply with a meetup place and time to finalise your order in person.
+        <div className="flex gap-4 p-5 bg-orange-400/5 border border-orange-400/20 rounded-2xl">
+          <Info className="w-5 h-5 text-orange-400 shrink-0 mt-0.5" />
+          <p className="text-xs text-muted-foreground leading-relaxed text-pretty">
+            <span className="font-black text-foreground uppercase tracking-tighter mr-1">Important: Cash Only.</span>
+            We do not process online payments. WhatsApp our team and they will reply with a meetup location and time.
           </p>
         </div>
 
         {/* WhatsApp buttons */}
-        <div className="space-y-3 mb-5">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Contact us to finalise</p>
+        <div className="space-y-3">
+          <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Contact an agent now</p>
           {ADMIN_WHATSAPP_NUMBERS.map(c => (
             <a
               key={c.wa}
               href={`https://wa.me/${c.wa}?text=${waEncoded}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center justify-between w-full px-5 py-4 bg-green-500 text-white rounded-xl font-semibold text-sm hover:bg-green-600 transition-colors"
+              className="flex items-center justify-between w-full px-6 py-4 bg-green-500 text-white rounded-2xl font-black text-sm hover:bg-green-600 transition-all shadow-lg shadow-green-500/20 group"
             >
-              <div className="flex items-center gap-3">
-                <MessageSquare className="w-5 h-5" />
+              <div className="flex items-center gap-4">
+                <MessageSquare className="w-6 h-6" />
                 <span>WhatsApp {c.label}</span>
               </div>
-              <ChevronRight className="w-4 h-4 opacity-70" />
+              <ChevronRight className="w-5 h-5 opacity-70 group-hover:translate-x-1 transition-transform" />
             </a>
           ))}
         </div>
 
-        {/* Pre-written message preview */}
-        <div className="bg-card border border-border rounded-xl p-4 mb-6">
-          <p className="text-xs font-semibold text-muted-foreground mb-2">Pre-filled message preview</p>
-          <pre className="text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed font-sans">{waMessage}</pre>
-        </div>
-
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-3 pt-4">
           <button
             onClick={() => router.push('/client')}
-            className="flex-1 py-2.5 border border-border text-foreground rounded-xl font-semibold text-sm hover:border-primary transition-colors"
+            className="flex-1 py-4 border border-border text-foreground rounded-2xl font-black text-sm hover:border-primary transition-all bg-card shadow-sm"
           >
-            Back to Dashboard
+            Dashboard
           </button>
           <button
             onClick={() => { setSubmitted(false); setDeliveryAddress(''); setNotes(''); setBookingId(null) }}
-            className="flex-1 py-2.5 bg-primary text-primary-foreground rounded-xl font-bold text-sm hover:opacity-90 transition-opacity"
+            className="flex-1 py-4 bg-primary text-primary-foreground rounded-2xl font-black text-sm hover:opacity-90 transition-opacity shadow-lg shadow-primary/20"
           >
             New Booking
           </button>
@@ -204,122 +202,130 @@ export default function BookPage() {
   }
 
   return (
-    <div className="max-w-xl mx-auto">
+    <div className="max-w-2xl mx-auto p-4 sm:p-0">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-foreground">Book a Load</h1>
-        <p className="text-sm text-muted-foreground mt-1">
+        <h1 className="text-3xl font-black text-foreground tracking-tight">Book a Load</h1>
+        <p className="text-sm text-muted-foreground mt-2 text-pretty font-medium leading-relaxed">
           Fill in your order details. After submitting, you&apos;ll be guided to WhatsApp us to arrange cash payment and a meetup.
         </p>
       </div>
 
-      <div className="bg-card border border-border rounded-2xl p-6 space-y-5">
+      <div className="bg-card border border-border rounded-3xl p-6 sm:p-8 space-y-8 shadow-xl shadow-primary/5">
         {/* Load type */}
-        <div>
-          <label className="text-sm font-semibold text-foreground mb-2 block">Material Type</label>
-          <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-3">
+          <label className="text-xs font-black text-muted-foreground uppercase tracking-widest ml-1">Select Material</label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {(Object.keys(LOAD_LABELS) as LoadType[]).map(type => (
               <button
                 key={type}
                 onClick={() => setLoadType(type)}
-                className={`p-3 border rounded-xl text-sm text-left transition-colors ${
+                className={`p-4 border-2 rounded-2xl text-left transition-all relative overflow-hidden group ${
                   loadType === type
-                    ? 'border-primary bg-primary/10 text-foreground'
-                    : 'border-border text-muted-foreground hover:border-primary/50'
+                    ? 'border-primary bg-primary/5 shadow-md shadow-primary/5'
+                    : 'border-border bg-secondary/20 hover:border-primary/30'
                 }`}
               >
-                <p className="font-semibold">{LOAD_LABELS[type]}</p>
-                {LOAD_RATES[type] > 0 && (
-                  <p className="text-primary text-xs mt-0.5">${LOAD_RATES[type]} / load</p>
-                )}
-                {type === 'other' && (
-                  <p className="text-muted-foreground text-xs mt-0.5">Rate discussed on WhatsApp</p>
+                <div className="relative z-10">
+                   <p className="font-black text-foreground tracking-tight">{LOAD_LABELS[type]}</p>
+                   {LOAD_RATES[type] > 0 && (
+                     <p className="text-primary text-xs font-black mt-1">${LOAD_RATES[type]} / load</p>
+                   )}
+                   {type === 'other' && (
+                     <p className="text-muted-foreground text-[10px] font-bold mt-1 uppercase">Discuss pricing on WhatsApp</p>
+                   )}
+                </div>
+                {loadType === type && (
+                  <div className="absolute -right-2 -bottom-2 opacity-10">
+                     <CheckCircle className="w-12 h-12 text-primary" />
+                  </div>
                 )}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Number of loads */}
-        <div>
-          <label className="text-sm font-semibold text-foreground mb-2 block">Number of Loads</label>
-          <input
-            type="number"
-            min={1}
-            value={numberOfLoads}
-            onChange={e => setNumberOfLoads(Math.max(1, Number(e.target.value)))}
-            className="w-full bg-input border border-border rounded-lg px-3 py-3 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-          />
-          {!isOther && (
-            <p className="text-xs text-muted-foreground mt-1.5">
-              Rate: <span className="text-foreground font-semibold">${rate}/load</span>
-              {' — '}
-              Estimated cash total:{' '}
-              <span className="text-primary font-bold text-sm">${estimatedTotal} USD</span>
-            </p>
-          )}
-        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+           {/* Number of loads */}
+          <div className="space-y-2">
+            <label className="text-xs font-black text-muted-foreground uppercase tracking-widest ml-1">Quantity (Loads)</label>
+            <input
+              type="number"
+              min={1}
+              value={numberOfLoads}
+              onChange={e => setNumberOfLoads(Math.max(1, Number(e.target.value)))}
+              className="w-full bg-secondary/30 border border-border rounded-xl px-4 py-3 text-foreground font-black focus:ring-2 focus:ring-primary/50 outline-none text-sm"
+            />
+            {!isOther && (
+              <p className="text-[10px] text-muted-foreground mt-2 font-bold uppercase tracking-wide">
+                Est. Total: <span className="text-primary font-black ml-1">${estimatedTotal} USD (Cash)</span>
+              </p>
+            )}
+          </div>
 
-        {/* Preferred date */}
-        <div>
-          <label className="text-sm font-semibold text-foreground mb-2 block">Preferred Delivery Date</label>
-          <input
-            type="date"
-            value={preferredDate}
-            min={format(new Date(), 'yyyy-MM-dd')}
-            onChange={e => setPreferredDate(e.target.value)}
-            className="w-full bg-input border border-border rounded-lg px-3 py-3 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-          />
+          {/* Preferred date */}
+          <div className="space-y-2">
+            <label className="text-xs font-black text-muted-foreground uppercase tracking-widest ml-1">Preferred Date</label>
+            <input
+              type="date"
+              value={preferredDate}
+              min={format(new Date(), 'yyyy-MM-dd')}
+              onChange={e => setPreferredDate(e.target.value)}
+              className="w-full bg-secondary/30 border border-border rounded-xl px-4 py-3 text-foreground font-black focus:ring-2 focus:ring-primary/50 outline-none text-sm"
+            />
+          </div>
         </div>
 
         {/* Delivery address */}
-        <div>
-          <label className="text-sm font-semibold text-foreground mb-2 block">
+        <div className="space-y-2">
+          <label className="text-xs font-black text-muted-foreground uppercase tracking-widest ml-1">
             Delivery Address / Site <span className="text-destructive">*</span>
           </label>
-          <input
-            type="text"
-            placeholder="e.g. 45 Samora Machel Ave, Harare"
-            value={deliveryAddress}
-            onChange={e => setDeliveryAddress(e.target.value)}
-            className="w-full bg-input border border-border rounded-lg px-3 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-          />
+          <div className="relative">
+             <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+             <input
+               type="text"
+               placeholder="e.g. 45 Samora Machel Ave, Harare"
+               value={deliveryAddress}
+               onChange={e => setDeliveryAddress(e.target.value)}
+               className="w-full bg-secondary/30 border border-border rounded-xl pl-12 pr-4 py-3 text-foreground font-medium placeholder:text-muted-foreground/60 focus:ring-2 focus:ring-primary/50 outline-none text-sm"
+             />
+          </div>
         </div>
 
         {/* Notes */}
-        <div>
-          <label className="text-sm font-semibold text-foreground mb-2 block">
-            Additional Notes <span className="text-muted-foreground font-normal">(optional)</span>
+        <div className="space-y-2">
+          <label className="text-xs font-black text-muted-foreground uppercase tracking-widest ml-1">
+            Additional Notes <span className="text-muted-foreground font-bold lowercase tracking-normal">(optional)</span>
           </label>
           <textarea
             rows={3}
             placeholder="Special instructions, gate codes, access details..."
             value={notes}
             onChange={e => setNotes(e.target.value)}
-            className="w-full bg-input border border-border rounded-lg px-3 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm resize-none"
+            className="w-full bg-secondary/30 border border-border rounded-xl px-4 py-3 text-foreground placeholder:text-muted-foreground/60 focus:ring-2 focus:ring-primary/50 outline-none text-sm resize-none font-medium"
           />
         </div>
 
         {/* Payment notice */}
-        <div className="flex gap-3 p-4 bg-orange-400/5 border border-orange-400/20 rounded-xl">
-          <Info className="w-4 h-4 text-orange-400 shrink-0 mt-0.5" />
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            <span className="font-semibold text-foreground">All transactions are cash only.</span> After submitting,
-            you will be redirected to WhatsApp with your full order details and pricing pre-filled. Our team will
-            reply with a meetup place and time to finalise payment in person.
+        <div className="flex gap-4 p-5 bg-orange-400/5 border border-orange-400/20 rounded-2xl">
+          <Info className="w-5 h-5 text-orange-400 shrink-0 mt-0.5" />
+          <p className="text-xs text-muted-foreground leading-relaxed text-pretty">
+            <span className="font-black text-foreground uppercase tracking-tighter mr-1">Cash Only.</span>
+            All transactions are cash only. After submitting, you will be directed to WhatsApp with your full order details.
           </p>
         </div>
 
         <button
           onClick={handleSubmit}
           disabled={loading}
-          className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-bold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2"
+          className="w-full py-4 bg-primary text-primary-foreground rounded-2xl font-black hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-base flex items-center justify-center gap-3 shadow-xl shadow-primary/30 active:scale-[0.98]"
         >
           {loading ? (
-            <span className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin inline-block" />
+            <span className="w-5 h-5 border-3 border-primary-foreground border-t-transparent rounded-full animate-spin inline-block" />
           ) : (
             <>
-              Submit &amp; Get WhatsApp Link
-              <ChevronRight className="w-4 h-4" />
+              Confirm &amp; Get WhatsApp Link
+              <ChevronRight className="w-5 h-5" />
             </>
           )}
         </button>
