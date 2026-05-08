@@ -33,7 +33,7 @@ export default function AdminOverviewPage() {
     loadData()
   }, [])
 
-  if (loading) return <div className="p-8 text-center text-muted-foreground animate-pulse">Loading dashboard...</div>
+  if (loading) return <div className="p-8 text-center text-muted-foreground animate-pulse font-medium">Loading dashboard...</div>
 
   const today = format(new Date(), 'yyyy-MM-dd')
   const todayRecord = records.find(r => r.date === today)
@@ -89,16 +89,16 @@ export default function AdminOverviewPage() {
   ]
 
   return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto space-y-8">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Dashboard Overview</h1>
+          <h1 className="text-2xl font-bold text-foreground tracking-tight">Dashboard Overview</h1>
           <p className="text-sm text-muted-foreground mt-1">{format(new Date(), 'EEEE, d MMMM yyyy')}</p>
         </div>
         <Link
           href="/admin/transactions"
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity"
+          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-bold hover:opacity-90 transition-opacity shadow-lg shadow-primary/20 w-full sm:w-auto"
         >
           <ClipboardList className="w-4 h-4" />
           New Transaction
@@ -106,43 +106,48 @@ export default function AdminOverviewPage() {
       </div>
 
       {/* Stats grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         {stats.map(stat => (
-          <div key={stat.label} className="bg-card border border-border rounded-xl p-5">
-            <div className="flex items-start justify-between mb-3">
-              <div className={`w-10 h-10 ${stat.bg} rounded-lg flex items-center justify-center`}>
+          <div key={stat.label} className="bg-card border border-border rounded-2xl p-5 hover:border-primary/30 transition-colors group">
+            <div className="flex items-start justify-between mb-4">
+              <div className={`w-10 h-10 ${stat.bg} rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform`}>
                 <stat.icon className={`w-5 h-5 ${stat.color}`} />
               </div>
             </div>
-            <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>
-            <p className="text-xs text-muted-foreground mt-1">{stat.label}</p>
+            <p className={`text-2xl font-bold ${stat.color} tracking-tight`}>{stat.value}</p>
+            <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground mt-1">{stat.label}</p>
           </div>
         ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Pending Bookings */}
-        <div className="bg-card border border-border rounded-xl p-5">
-          <div className="flex items-center justify-between mb-4">
+        <div className="bg-card border border-border rounded-2xl p-5">
+          <div className="flex items-center justify-between mb-6">
             <h2 className="font-bold text-foreground flex items-center gap-2">
               <Bell className="w-4 h-4 text-primary" />
               Pending Bookings
             </h2>
-            <Link href="/admin/messages" className="text-xs text-primary hover:underline">View all</Link>
+            <Link href="/admin/messages" className="text-xs font-bold text-primary hover:underline">View all</Link>
           </div>
           {pendingBookings.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">No pending bookings</p>
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+               <div className="w-12 h-12 bg-secondary rounded-full flex items-center justify-center mb-3">
+                  <CheckCircle className="w-6 h-6 text-muted-foreground/40" />
+               </div>
+               <p className="text-sm text-muted-foreground">No pending bookings</p>
+            </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {pendingBookings.slice(0, 5).map(b => (
-                <div key={b.id} className="flex items-center justify-between p-3 bg-secondary/30 rounded-lg">
+                <div key={b.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-secondary/20 rounded-xl border border-border/50 gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-foreground">{b.clientName}</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-sm font-bold text-foreground">{b.clientName}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
                       {b.loadTypeLabel} × {b.numberOfLoads} — {b.preferredDate}
                     </p>
                   </div>
-                  <span className="px-2 py-0.5 text-xs bg-orange-400/10 text-orange-400 rounded-full border border-orange-400/20">
+                  <span className="px-3 py-1 text-[10px] font-black uppercase tracking-widest bg-orange-400/10 text-orange-400 rounded-full border border-orange-400/20 w-fit">
                     Pending
                   </span>
                 </div>
@@ -152,28 +157,28 @@ export default function AdminOverviewPage() {
         </div>
 
         {/* Recent Records */}
-        <div className="bg-card border border-border rounded-xl p-5">
-          <div className="flex items-center justify-between mb-4">
+        <div className="bg-card border border-border rounded-2xl p-5">
+          <div className="flex items-center justify-between mb-6">
             <h2 className="font-bold text-foreground flex items-center gap-2">
               <Calendar className="w-4 h-4 text-primary" />
               Recent Daily Records
             </h2>
-            <Link href="/admin/transactions" className="text-xs text-primary hover:underline">View all</Link>
+            <Link href="/admin/transactions" className="text-xs font-bold text-primary hover:underline">View all</Link>
           </div>
           {records.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">No records yet — start recording transactions</p>
+            <p className="text-sm text-muted-foreground text-center py-12">No records yet — start recording transactions</p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {[...records]
                 .sort((a, b) => b.date.localeCompare(a.date))
                 .slice(0, 5)
                 .map(r => (
-                  <div key={r.id} className="flex items-center justify-between p-3 bg-secondary/30 rounded-lg">
+                  <div key={r.id} className="flex items-center justify-between p-4 bg-secondary/20 rounded-xl border border-border/50">
                     <div>
-                      <p className="text-sm font-semibold text-foreground">{format(new Date(r.date + 'T12:00:00'), 'dd MMM yyyy')}</p>
-                      <p className="text-xs text-muted-foreground">{r.loads.length} loads · Gross ${r.grossRevenue}</p>
+                      <p className="text-sm font-bold text-foreground">{format(new Date(r.date + 'T12:00:00'), 'dd MMM yyyy')}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{r.loads.length} loads · Gross ${r.grossRevenue}</p>
                     </div>
-                    <span className={`text-sm font-bold ${r.netRevenue >= 0 ? 'text-green-400' : 'text-destructive'}`}>
+                    <span className={`text-sm font-black ${r.netRevenue >= 0 ? 'text-green-400' : 'text-destructive'}`}>
                       ${r.netRevenue.toFixed(2)}
                     </span>
                   </div>
@@ -183,31 +188,31 @@ export default function AdminOverviewPage() {
         </div>
 
         {/* Driver Overview */}
-        <div className="bg-card border border-border rounded-xl p-5">
-          <div className="flex items-center justify-between mb-4">
+        <div className="bg-card border border-border rounded-2xl p-5">
+          <div className="flex items-center justify-between mb-6">
             <h2 className="font-bold text-foreground flex items-center gap-2">
               <Users className="w-4 h-4 text-primary" />
-              Driver Overview
+              Driver Performance
             </h2>
-            <Link href="/admin/employees" className="text-xs text-primary hover:underline">Manage</Link>
+            <Link href="/admin/employees" className="text-xs font-bold text-primary hover:underline">Manage</Link>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-3">
             {employees.filter(e => e.role === 'driver').map(driver => {
               const driverLoads = records.filter(r => r.date.startsWith(format(new Date(), 'yyyy-MM'))).flatMap(r => r.loads).filter(l => l.driverName === driver.name)
               return (
-                <div key={driver.id} className="flex items-center justify-between p-3 bg-secondary/30 rounded-lg">
+                <div key={driver.id} className="flex items-center justify-between p-4 bg-secondary/20 rounded-xl border border-border/50">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center text-xs font-bold text-primary">
+                    <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center text-sm font-bold text-primary border border-primary/20">
                       {driver.name[0]}
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-foreground">{driver.name}</p>
-                      <p className="text-xs text-muted-foreground">{trucks.find(t => t.driverName === driver.name)?.plate ?? 'Unassigned'}</p>
+                      <p className="text-sm font-bold text-foreground">{driver.name}</p>
+                      <p className="text-xs text-muted-foreground font-mono">{trucks.find(t => t.driverName === driver.name)?.plate ?? 'Unassigned'}</p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-bold text-primary">{driverLoads.length}</p>
-                    <p className="text-xs text-muted-foreground">loads this month</p>
+                    <p className="text-lg font-black text-primary leading-none">{driverLoads.length}</p>
+                    <p className="text-[10px] uppercase tracking-tighter text-muted-foreground mt-1">loads this month</p>
                   </div>
                 </div>
               )
@@ -216,23 +221,28 @@ export default function AdminOverviewPage() {
         </div>
 
         {/* Fleet quick view */}
-        <div className="bg-card border border-border rounded-xl p-5">
-          <div className="flex items-center justify-between mb-4">
+        <div className="bg-card border border-border rounded-2xl p-5">
+          <div className="flex items-center justify-between mb-6">
             <h2 className="font-bold text-foreground flex items-center gap-2">
               <TruckIcon className="w-4 h-4 text-primary" />
               Fleet Status
             </h2>
-            <Link href="/admin/garage" className="text-xs text-primary hover:underline">Manage</Link>
+            <Link href="/admin/garage" className="text-xs font-bold text-primary hover:underline">Manage</Link>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-3">
             {trucks.map(truck => (
-              <div key={truck.id} className="flex items-center justify-between p-3 bg-secondary/30 rounded-lg">
-                <div>
-                  <p className="text-sm font-semibold text-foreground font-mono">{truck.plate}</p>
-                  <p className="text-xs text-muted-foreground">{truck.driverName ?? 'Unassigned'}</p>
+              <div key={truck.id} className="flex items-center justify-between p-4 bg-secondary/20 rounded-xl border border-border/50">
+                <div className="flex items-center gap-3">
+                   <div className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center">
+                      <TruckIcon className="w-5 h-5 text-muted-foreground/60" />
+                   </div>
+                   <div>
+                    <p className="text-sm font-bold text-foreground font-mono">{truck.plate}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{truck.driverName ?? 'Unassigned'}</p>
+                  </div>
                 </div>
                 <span
-                  className={`px-2 py-0.5 text-xs rounded-full border ${
+                  className={`px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-full border ${
                     truck.status === 'active'
                       ? 'bg-green-400/10 text-green-400 border-green-400/20'
                       : truck.status === 'maintenance'
