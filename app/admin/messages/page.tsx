@@ -18,12 +18,11 @@ export default function AdminMessagesPage() {
   const [loading, setLoading] = useState(true)
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  const messages = useRealtimeMessages(initialMessages)
+  const { messages } = useRealtimeMessages(initialMessages)
 
   useEffect(() => {
     async function loadProfiles() {
       const p = await getProfiles()
-      // Filter out self and only show clients/employees
       setProfiles(p.filter(u => u.username !== 'admin'))
       setLoading(false)
     }
@@ -36,13 +35,11 @@ export default function AdminMessagesPage() {
     async function loadThread() {
       const m = await getMessages(currentSelectedUser)
       setInitialMessages(m)
-      // Mark as read when opening thread
       await markMessagesRead('admin')
     }
     loadThread()
   }, [selectedUser])
 
-  // Real-time read receipt handling
   useEffect(() => {
     if (!selectedUser || loading) return
     const currentSelectedUser = selectedUser
