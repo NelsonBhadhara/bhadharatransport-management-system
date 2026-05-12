@@ -43,11 +43,19 @@ export async function middleware(request: NextRequest) {
   if (user && isProtected) {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role')
+      .select('role, status')
       .eq('id', user.id)
       .single()
 
     const role = profile?.role
+    const status = profile?.status
+
+    if (status === 'suspended') {
+      const url = request.nextUrl.clone()
+      url.pathname = '/'
+      url.searchParams.set('error', 'suspended')
+      return NextResponse.redirect(url)
+    }
 
     if (request.nextUrl.pathname.startsWith('/admin') && role !== 'admin') {
       const url = request.nextUrl.clone()
