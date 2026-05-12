@@ -242,8 +242,8 @@ export async function getBookings(clientUsername?: string): Promise<Booking[]> {
     loadType: b.load_type as LoadType,
     loadTypeLabel: b.load_type_label,
     numberOfLoads: b.number_of_loads,
-    preferredDate: b.preferred_date,
-    deliveryAddress: b.delivery_address,
+    preferred_date: b.preferred_date,
+    delivery_address: b.delivery_address,
     status: b.status as Booking['status'],
     createdAt: b.created_at,
     notes: b.notes,
@@ -367,18 +367,26 @@ export async function getProfiles(): Promise<{ id: string; username: string; rol
   return data || []
 }
 
-export async function updateProfileRole(id: string, role: string): Promise<void> {
+export async function updateProfileRole(id: string, role: string): Promise<{ success: boolean; error?: any }> {
   const { error } = await supabase.from('profiles').update({ role }).eq('id', id)
-  if (error) console.error('updateProfileRole error:', error)
+  if (error) {
+    console.error('updateProfileRole error:', error)
+    return { success: false, error }
+  }
+  return { success: true }
 }
 
-export async function updateProfileStatus(id: string, status: string, suspendedUntil: string | null = null): Promise<void> {
+export async function updateProfileStatus(id: string, status: string, suspendedUntil: string | null = null): Promise<{ success: boolean; error?: any }> {
   const { error } = await supabase.from('profiles').update({ status, suspended_until: suspendedUntil }).eq('id', id)
-  if (error) console.error('updateProfileStatus error:', error)
+  if (error) {
+    console.error('updateProfileStatus error:', error)
+    return { success: false, error }
+  }
+  return { success: true }
 }
 
-export async function suspendProfile(id: string, weeks: number): Promise<void> {
+export async function suspendProfile(id: string, weeks: number): Promise<{ success: boolean; error?: any }> {
   const until = new Date()
   until.setDate(until.getDate() + (weeks * 7))
-  await updateProfileStatus(id, 'suspended', until.toISOString())
+  return await updateProfileStatus(id, 'suspended', until.toISOString())
 }
