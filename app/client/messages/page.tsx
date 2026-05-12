@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import type { Message } from '@/lib/store'
+import { store, Message } from '@/lib/store'
 import { getMessages, sendMessage, markMessagesRead } from '@/lib/supabase/database'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useRealtimeMessages } from '@/hooks/use-realtime-messages'
@@ -25,17 +25,17 @@ export default function ClientMessagesPage() {
   const [loading, setLoading] = useState(true)
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  // Pass profile.username so realtime is scoped to this user's conversation
-  const { messages, appendMessage } = useRealtimeMessages(initialMessages, profile?.username)
+  const messages = useRealtimeMessages(initialMessages)
 
   useEffect(() => {
     if (!profile) return
+    const currentProfile = profile
     async function loadData() {
-      const m = await getMessages(profile.username)
+      const m = await getMessages(currentProfile.username)
       setInitialMessages(m)
       setLoading(false)
       // Initial mark as read
-      await markMessagesRead(profile.username)
+      await markMessagesRead(currentProfile.username)
     }
     loadData()
   }, [profile])
@@ -43,9 +43,10 @@ export default function ClientMessagesPage() {
   // Mark incoming messages as read in real-time
   useEffect(() => {
     if (!profile || loading) return
-    const unread = messages.filter(m => m.toUser === profile.username && !m.read)
+    const currentProfile = profile
+    const unread = messages.filter(m => m.toUser === currentProfile.username && !m.read)
     if (unread.length > 0) {
-      markMessagesRead(profile.username)
+      markMessagesRead(currentProfile.username)
     }
   }, [messages, profile, loading])
 
@@ -57,17 +58,12 @@ export default function ClientMessagesPage() {
     const trimmed = text.trim()
     if (!trimmed || !profile) return
     
-    const sent = await sendMessage({
+    await sendMessage({
       fromUser: profile.username,
       toUser: 'admin',
       content: trimmed,
     })
     setText('')
-
-    // Optimistically append so the message appears instantly
-    if (sent) {
-      appendMessage(sent)
-    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -92,7 +88,7 @@ export default function ClientMessagesPage() {
       {/* WhatsApp quick contact */}
       <div className="bg-card border border-border rounded-2xl p-4 mb-4">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-          Preferred — WhatsApp for urgent inquiries & payment meetups
+          Preferred — WhatsApp for urgent inquiries &amp; payment meetups
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           {ADMIN_WA.map(c => (
