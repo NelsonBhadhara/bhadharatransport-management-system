@@ -4,40 +4,66 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { X, Truck, Lock, User, ShieldCheck, Users } from 'lucide-react'
 import { store } from '@/lib/store'
+import { signIn } from '@/lib/supabase/auth'
 
 type Portal = 'select' | 'admin' | 'client'
 
 export default function LoginModal({ onClose, onSignup }: { onClose: () => void; onSignup: () => void }) {
   const router = useRouter()
   const [portal, setPortal] = useState<Portal>('select')
-  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     setLoading(true)
     setError('')
-    setTimeout(() => {
-      const user = store.login(username, password)
-      if (!user) {
-        setError('Invalid username or password. Please try again.')
+    
+    try {
+      const { user, role: userRole, error: signInError } = await signIn(email, password)
+      
+      if (signInError || !user) {
+        if (signInError?.includes('Invalid login credentials')) {
+          setError('Invalid email or password. Please try again.')
+        } else if (signInError?.includes('suspended')) {
+          setError(signInError)
+        } else {
+          setError(signInError || 'An error occurred during login.')
+        }
         setLoading(false)
         return
       }
-      if (portal === 'admin' && user.role !== 'admin') {
+
+      if (portal === 'admin' && userRole !== 'admin') {
         setError('Access denied. This portal is for administrators only.')
-        store.logout()
         setLoading(false)
         return
       }
+
+      // Sync with legacy store for components that still use store.getCurrentUser()
+      // We use a dummy user object that matches the store's SystemUser type
+      store.setCurrentUser({
+        id: 'supabase-session',
+        username: email.split('@')[0], // Fallback username
+        email: email,
+        role: userRole as any,
+        passwordHash: 'supabase', // Dummy for type safety
+        status: 'active',
+        createdAt: new Date().toISOString()
+      })
+
       setLoading(false)
-      if (user.role === 'admin') {
+      if (userRole === 'admin') {
         router.push('/admin')
       } else {
         router.push('/client')
       }
-    }, 400)
+    } catch (err) {
+      console.error('Login error:', err)
+      setError('A critical error occurred. Please check your connection.')
+      setLoading(false)
+    }
   }
 
   return (
@@ -120,10 +146,10 @@ export default function LoginModal({ onClose, onSignup }: { onClose: () => void;
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <input
-                    type="text"
-                    placeholder="Username"
-                    value={username}
-                    onChange={e => setUsername(e.target.value)}
+                    type="email"
+                    placeholder="Email address"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
                     className="w-full bg-input border border-border rounded-lg pl-10 pr-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm"
                   />
                 </div>
@@ -142,7 +168,7 @@ export default function LoginModal({ onClose, onSignup }: { onClose: () => void;
 
               <button
                 onClick={handleLogin}
-                disabled={loading || !username || !password}
+                disabled={loading || !email || !password}
                 className="w-full py-3 bg-primary text-primary-foreground rounded-lg font-bold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Verifying...' : 'Login'}

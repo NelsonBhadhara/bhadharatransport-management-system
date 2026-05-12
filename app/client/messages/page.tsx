@@ -1,22 +1,12 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { store, Message } from '@/lib/store'
+import { useState, useEffect, useRef } from 'react'
 import { getMessages, sendMessage, markMessagesRead } from '@/lib/supabase/database'
 import { useAuth } from '@/components/auth/AuthProvider'
-import { useRealtimeMessages } from '@/hooks/use-realtime-messages'
+import { Message, store } from '@/lib/store'
 import { format, parseISO } from 'date-fns'
-import { Send, MessageSquare, ChevronRight } from 'lucide-react'
-
-const ADMIN_WA = [
-  { label: '0773 083 687', wa: '263773083687' },
-  { label: '0774 049 526', wa: '263774049526' },
-  { label: '0770 083 687', wa: '263770083687' },
-]
-
-const GENERAL_WA_MSG = encodeURIComponent(
-  `*BHADHARA TRANSPORT — General Inquiry*\n\nHello, I would like to inquire about your transport services.\n\nPlease advise on availability, pricing, and how to arrange a cash payment meetup.\n\nThank you.`
-)
+import { Send, User, Clock, Check, CheckCheck, Loader2, MessageSquare } from 'lucide-react'
+import { useRealtimeMessages } from '@/hooks/use-realtime-messages'
 
 export default function ClientMessagesPage() {
   const { profile } = useAuth()
@@ -25,23 +15,26 @@ export default function ClientMessagesPage() {
   const [loading, setLoading] = useState(true)
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  const { messages } = useRealtimeMessages(initialMessages)
+  const messages = useRealtimeMessages(initialMessages)
 
   useEffect(() => {
-    if (!profile) return
     const currentProfile = profile
+    if (!currentProfile) return
     async function loadData() {
+      if (!currentProfile) return
       const m = await getMessages(currentProfile.username)
       setInitialMessages(m)
       setLoading(false)
+      // Initial mark as read
       await markMessagesRead(currentProfile.username)
     }
     loadData()
   }, [profile])
 
+  // Mark incoming messages as read in real-time
   useEffect(() => {
-    if (!profile || loading) return
     const currentProfile = profile
+    if (!currentProfile || loading) return
     const unread = messages.filter(m => m.toUser === currentProfile.username && !m.read)
     if (unread.length > 0) {
       markMessagesRead(currentProfile.username)
@@ -54,120 +47,103 @@ export default function ClientMessagesPage() {
 
   const handleSend = async () => {
     const trimmed = text.trim()
-    if (!trimmed || !profile) return
+    const currentProfile = profile
+    if (!trimmed || !currentProfile) return
     
     await sendMessage({
-      fromUser: profile.username,
+      fromUser: currentProfile.username,
       toUser: 'admin',
-      content: trimmed,
+      content: trimmed
     })
     setText('')
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSend()
-    }
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-[60vh]">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    )
   }
 
-  if (loading) return <div className="p-8 text-center text-muted-foreground animate-pulse">Loading messages...</div>
-
   return (
-    <div className="flex flex-col h-[calc(100vh-80px)] max-w-2xl mx-auto">
+    <div className="flex flex-col h-[calc(100vh-12rem)] max-w-4xl mx-auto">
       {/* Header */}
-      <div className="mb-4">
-        <h1 className="text-2xl font-bold text-foreground">Messages</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Leave a message for the Bhadhara Transport team, or contact us directly on WhatsApp for urgent matters.
-        </p>
-      </div>
-
-      {/* WhatsApp quick contact */}
-      <div className="bg-card border border-border rounded-2xl p-4 mb-4">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-          Preferred — WhatsApp for urgent inquiries &amp; payment meetups
-        </p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          {ADMIN_WA.map(c => (
-            <a
-              key={c.wa}
-              href={`https://wa.me/${c.wa}?text=${GENERAL_WA_MSG}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-between px-4 py-3 bg-green-500 text-white rounded-xl font-semibold text-sm hover:bg-green-600 transition-colors"
-            >
-              <div className="flex items-center gap-2">
-                <MessageSquare className="w-4 h-4" />
-                <span>{c.label}</span>
-              </div>
-              <ChevronRight className="w-4 h-4 opacity-70" />
-            </a>
-          ))}
+      <div className="flex items-center justify-between p-4 bg-card border border-border rounded-t-2xl">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+            <MessageSquare className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="font-bold text-foreground">Support Chat</h1>
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
+              Admin Support
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* In-app message thread */}
-      <div className="flex-1 bg-card border border-border rounded-2xl flex flex-col overflow-hidden">
-        <div className="px-4 py-3 border-b border-border">
-          <p className="text-sm font-semibold text-foreground">In-App Messages</p>
-          <p className="text-xs text-muted-foreground">For non-urgent enquiries only. Cash payment meetups must be arranged via WhatsApp.</p>
-        </div>
-
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full gap-2 text-center py-10">
-              <div className="w-12 h-12 bg-secondary rounded-full flex items-center justify-center">
-                <MessageSquare className="w-6 h-6 text-muted-foreground" />
-              </div>
-              <p className="text-sm text-muted-foreground">No messages yet. Say hello!</p>
+      {/* Messages area */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-secondary/5 border-x border-border custom-scrollbar">
+        {messages.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-center p-8">
+            <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
+              <MessageSquare className="w-8 h-8 text-muted-foreground" />
             </div>
-          )}
-
-          {messages.map(msg => {
-            const isMe = msg.fromUser === profile?.username
+            <p className="text-foreground font-semibold">Start a conversation</p>
+            <p className="text-sm text-muted-foreground">Ask anything about your bookings or our services.</p>
+          </div>
+        ) : (
+          messages.map((m) => {
+            const isMe = m.fromUser === profile?.username
             return (
-              <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                <div
-                  className={`max-w-[75%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
-                    isMe
-                      ? 'bg-primary text-primary-foreground rounded-br-sm'
-                      : 'bg-secondary text-foreground rounded-bl-sm'
-                  }`}
-                >
-                  <p>{msg.content}</p>
-                  <p
-                    className={`text-xs mt-1 ${
-                      isMe ? 'text-primary-foreground/60 text-right' : 'text-muted-foreground'
-                    }`}
-                  >
-                    {format(parseISO(msg.timestamp), 'HH:mm • d MMM')}
-                  </p>
+              <div key={m.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[85%] sm:max-w-[70%] space-y-1`}>
+                  <div className={`p-3 rounded-2xl text-sm ${
+                    isMe 
+                      ? 'bg-primary text-primary-foreground rounded-tr-none shadow-lg shadow-primary/10' 
+                      : 'bg-card border border-border text-foreground rounded-tl-none shadow-sm'
+                  }`}>
+                    {m.content}
+                  </div>
+                  <div className={`flex items-center gap-1.5 px-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                    <p className="text-[10px] text-muted-foreground">
+                      {format(parseISO(m.timestamp), 'HH:mm')}
+                    </p>
+                    {isMe && (
+                      m.read ? (
+                        <CheckCheck className="w-3 h-3 text-blue-400" />
+                      ) : (
+                        <Check className="w-3 h-3 text-muted-foreground" />
+                      )
+                    )}
+                  </div>
                 </div>
               </div>
             )
-          })}
-          <div ref={bottomRef} />
-        </div>
+          })
+        )}
+        <div ref={bottomRef} />
+      </div>
 
-        {/* Input */}
-        <div className="border-t border-border p-3 flex items-end gap-2">
-          <textarea
-            rows={1}
-            placeholder="Type a message..."
+      {/* Input area */}
+      <div className="p-4 bg-card border border-border rounded-b-2xl">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            placeholder="Type your message..."
             value={text}
             onChange={e => setText(e.target.value)}
-            onKeyDown={handleKeyDown}
-            className="flex-1 bg-input border border-border rounded-xl px-3 py-2.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm resize-none leading-relaxed"
+            onKeyDown={e => e.key === 'Enter' && handleSend()}
+            className="flex-1 bg-input border border-border rounded-xl px-4 py-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
           />
           <button
             onClick={handleSend}
             disabled={!text.trim()}
-            className="p-2.5 bg-primary text-primary-foreground rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-            aria-label="Send message"
+            className="p-3 bg-primary text-primary-foreground rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Send className="w-4 h-4" />
+            <Send className="w-5 h-5" />
           </button>
         </div>
       </div>
