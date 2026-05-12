@@ -25,7 +25,7 @@ export default function ClientMessagesPage() {
   const [loading, setLoading] = useState(true)
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  const messages = useRealtimeMessages(initialMessages)
+  const { messages } = useRealtimeMessages(initialMessages)
 
   useEffect(() => {
     if (!profile) return
@@ -34,13 +34,11 @@ export default function ClientMessagesPage() {
       const m = await getMessages(currentProfile.username)
       setInitialMessages(m)
       setLoading(false)
-      // Initial mark as read
       await markMessagesRead(currentProfile.username)
     }
     loadData()
   }, [profile])
 
-  // Mark incoming messages as read in real-time
   useEffect(() => {
     if (!profile || loading) return
     const currentProfile = profile
