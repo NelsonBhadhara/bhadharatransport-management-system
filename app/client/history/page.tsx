@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { store, Booking, LOAD_RATES } from '@/lib/store'
+import { store, Booking, LoadPrices } from '@/lib/store'
+import { getBookings, getSettings } from '@/lib/supabase/database'
+import { useAuth } from '@/components/auth/AuthProvider'
 import { MessageSquare, ChevronRight, Clock, CheckCircle, XCircle, Truck, Info, Calendar } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 
@@ -42,8 +44,8 @@ const STATUS_CONFIG = {
   },
 }
 
-function buildFollowUpMessage(booking: Booking) {
-  const rate = LOAD_RATES[booking.loadType]
+function buildFollowUpMessage(booking: Booking, loadPrices: LoadPrices) {
+  const rate = booking.loadType === 'other' ? 0 : loadPrices[booking.loadType as keyof LoadPrices] || 0
   const isOther = booking.loadType === 'other'
   const total = isOther ? 0 : rate * booking.numberOfLoads
 
@@ -73,15 +75,28 @@ function buildFollowUpMessage(booking: Booking) {
 export default function HistoryPage() {
   const [bookings, setBookings] = useState<Booking[]>([])
   const [expanded, setExpanded] = useState<string | null>(null)
-  const user = store.getCurrentUser()
+  const { profile } = useAuth()
+  const [loadPrices, setLoadPrices] = useState<LoadPrices>({ riversand: 90, pitsand: 80, quarrystone: 120, gravel: 70, other: 0 })
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const all = store.getBookings()
-    const mine = all
-      .filter(b => b.clientUsername === user?.username)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    setBookings(mine)
-  }, [user?.username])
+    async function loadData() {
+      if (!profile) return
+      const [all, s] = await Promise.all([
+        getBookings(),
+        getSettings()
+      ])
+      const mine = all
+        .filter(b => b.clientUsername === profile.username)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      setBookings(mine)
+      if (s) setLoadPrices(s.loadPrices)
+      setLoading(false)
+    }
+    loadData()
+  }, [profile?.username])
+
+  if (loading) return <div className="p-8 text-center text-muted-foreground animate-pulse">Loading history...</div>
 
   return (
     <div className="space-y-6">
@@ -106,11 +121,11 @@ export default function HistoryPage() {
         {bookings.map(booking => {
           const cfg = STATUS_CONFIG[booking.status]
           const StatusIcon = cfg.icon
-          const rate = LOAD_RATES[booking.loadType]
+          const rate = booking.loadType === 'other' ? 0 : loadPrices[booking.loadType as keyof LoadPrices] || 0
           const isOther = booking.loadType === 'other'
           const total = isOther ? null : rate * booking.numberOfLoads
           const isOpen = expanded === booking.id
-          const waMsg = buildFollowUpMessage(booking)
+          const waMsg = buildFollowUpMessage(booking, loadPrices)
           const waEncoded = encodeURIComponent(waMsg)
 
           return (
