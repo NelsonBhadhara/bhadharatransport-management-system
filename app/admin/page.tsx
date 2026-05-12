@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Truck as TruckIcon, DollarSign, ClipboardList, Users, TrendingUp, Bell, Calendar } from 'lucide-react'
+import { Truck as TruckIcon, DollarSign, ClipboardList, Users, TrendingUp, Bell, Calendar, CheckCircle } from 'lucide-react'
 import type { DailyRecord, Booking, Truck, Employee } from '@/lib/store'
 import { getRecords, getBookings, getTrucks, getEmployees } from '@/lib/supabase/database'
 import { format } from 'date-fns'
