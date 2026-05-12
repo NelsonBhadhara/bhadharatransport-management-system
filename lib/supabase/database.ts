@@ -188,12 +188,19 @@ export async function getRecordsByDateRange(from: string, to: string): Promise<D
 // ── Messages ────────────────────────────────────────────────────────────────
 
 export async function getMessages(username?: string): Promise<Message[]> {
+  console.log('getMessages requested for:', username || 'all (admin)')
   let query = supabase.from('messages').select('*').order('created_at', { ascending: true })
   if (username) {
     query = query.or(`from_user.eq.${username},to_user.eq.${username}`)
   }
   const { data, error } = await query
-  if (error) { console.error('getMessages error:', error); return [] }
+  
+  if (error) {
+    console.error('getMessages error:', error)
+    return []
+  }
+  
+  console.log(`getMessages found ${data?.length || 0} messages`)
   return (data || []).map(m => ({
     id: m.id,
     fromUser: m.from_user,
@@ -205,12 +212,21 @@ export async function getMessages(username?: string): Promise<Message[]> {
 }
 
 export async function sendMessage(msg: { fromUser: string; toUser: string; content: string }): Promise<Message | null> {
+  console.log('sendMessage starting:', msg)
   const { data, error } = await supabase
     .from('messages')
     .insert({ from_user: msg.fromUser, to_user: msg.toUser, content: msg.content })
     .select()
     .single()
-  if (error) { console.error('sendMessage error:', error); return null }
+  
+  if (error) {
+    console.error('sendMessage error:', error)
+    // Optional: Alert the user in development or if critical
+    // alert('Message failed to send: ' + error.message)
+    return null
+  }
+  
+  console.log('sendMessage successful:', data)
   return {
     id: data.id, fromUser: data.from_user, toUser: data.to_user,
     content: data.content, timestamp: data.created_at, read: data.read,
@@ -242,12 +258,12 @@ export async function getBookings(clientUsername?: string): Promise<Booking[]> {
     loadType: b.load_type as LoadType,
     loadTypeLabel: b.load_type_label,
     numberOfLoads: b.number_of_loads,
-    preferred_date: b.preferred_date,
-    delivery_address: b.delivery_address,
+    preferredDate: b.preferred_date,
+    deliveryAddress: b.delivery_address,
     status: b.status as Booking['status'],
     createdAt: b.created_at,
     notes: b.notes,
-    estimated_delivery: b.estimated_delivery,
+    estimatedDelivery: b.estimated_delivery,
   }))
 }
 
