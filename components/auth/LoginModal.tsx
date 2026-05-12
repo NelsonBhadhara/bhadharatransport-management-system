@@ -2,15 +2,16 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { X, Truck, Lock, User, ShieldCheck, Users } from 'lucide-react'
-import { store } from '@/lib/store'
-import { signIn } from '@/lib/supabase/auth'
+import { X, Truck, Lock, Mail, ShieldCheck, Users } from 'lucide-react'
+import { useAuth } from './AuthProvider'
+import { store } from '../../lib/store'
 
 type Portal = 'select' | 'admin' | 'client'
 
 export default function LoginModal({ onClose, onSignup }: { onClose: () => void; onSignup: () => void }) {
   const router = useRouter()
   const [portal, setPortal] = useState<Portal>('select')
+  const { signIn } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -21,12 +22,12 @@ export default function LoginModal({ onClose, onSignup }: { onClose: () => void;
     setError('')
     
     try {
-      const { user, role: userRole, error: signInError } = await signIn(email, password)
+      const { error: signInError, role: userRole } = await signIn(email, password)
       
-      if (signInError || !user) {
-        if (signInError?.includes('Invalid login credentials')) {
+      if (signInError) {
+        if (signInError.includes('Invalid login credentials')) {
           setError('Invalid email or password. Please try again.')
-        } else if (signInError?.includes('suspended')) {
+        } else if (signInError.includes('suspended')) {
           setError(signInError)
         } else {
           setError(signInError || 'An error occurred during login.')
@@ -61,7 +62,7 @@ export default function LoginModal({ onClose, onSignup }: { onClose: () => void;
       }
     } catch (err) {
       console.error('Login error:', err)
-      setError('A critical error occurred. Please check your connection.')
+      setError('A connection error occurred. Please try again.')
       setLoading(false)
     }
   }
@@ -144,10 +145,10 @@ export default function LoginModal({ onClose, onSignup }: { onClose: () => void;
 
               <div className="space-y-3">
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <input
                     type="email"
-                    placeholder="Email address"
+                    placeholder="Email Address"
                     value={email}
                     onChange={e => setEmail(e.target.value)}
                     className="w-full bg-input border border-border rounded-lg pl-10 pr-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm"
