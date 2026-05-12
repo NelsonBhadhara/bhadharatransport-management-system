@@ -15,6 +15,7 @@ import {
 import { getProfiles, updateProfileRole, updateProfileStatus, suspendProfile } from '@/lib/supabase/database'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { format, isAfter, parseISO } from 'date-fns'
+import { toast } from 'sonner'
 
 export default function UserManagementPage() {
   const { profile: currentAdmin } = useAuth()
@@ -37,36 +38,71 @@ export default function UserManagementPage() {
   }, [])
 
   const handleRoleChange = async (userId: string, newRole: string) => {
-    if (!confirm(`Are you sure you want to change this user's role to ${newRole}?`)) return
+    const user = users.find(u => u.id === userId)
+    if (!user) return
+
+    const isPromotion = newRole === 'admin'
+    const confirmMessage = isPromotion 
+      ? `Are you sure you want to promote ${user.username} to Admin?` 
+      : `Are you sure you want to change ${user.username}'s role to ${newRole}?`
+
+    if (!confirm(confirmMessage)) return
     
-    await updateProfileRole(userId, newRole)
-    setUsers(users.map(u => u.id === userId ? { ...u, role: newRole } : u))
+    const loadingToast = toast.loading(isPromotion ? 'Promoting user...' : 'Updating role...')
+    
+    const result = await updateProfileRole(userId, newRole)
+    
+    if (result.success) {
+      setUsers(users.map(u => u.id === userId ? { ...u, role: newRole } : u))
+      toast.success(isPromotion ? 'User promoted to Admin successfully!' : 'User role updated successfully.', { id: loadingToast })
+    } else {
+      toast.error('Failed to update user role. Please try again.', { id: loadingToast })
+    }
   }
 
   const handleStatusChange = async (userId: string, newStatus: string) => {
+    const user = users.find(u => u.id === userId)
+    if (!user) return
+
     const action = newStatus === 'active' ? 'reactivate' : 'suspend'
     if (!confirm(`Are you sure you want to ${action} this user?`)) return
     
-    await updateProfileStatus(userId, newStatus, null)
-    setUsers(users.map(u => u.id === userId ? { ...u, status: newStatus, suspended_until: null } : u))
+    const loadingToast = toast.loading(`${action === 'reactivate' ? 'Reactivating' : 'Suspending'} user...`)
+    const result = await updateProfileStatus(userId, newStatus, null)
+    
+    if (result.success) {
+      setUsers(users.map(u => u.id === userId ? { ...u, status: newStatus, suspended_until: null } : u))
+      toast.success(`User ${action === 'reactivate' ? 'reactivated' : 'suspended'} successfully.`, { id: loadingToast })
+    } else {
+      toast.error(`Failed to ${action} user.`, { id: loadingToast })
+    }
   }
 
   const handleTimedSuspend = async () => {
     if (!suspendingUser) return
     const numWeeks = parseInt(weeks)
-    if (isNaN(numWeeks) || numWeeks <= 0) return
+    if (isNaN(numWeeks) || numWeeks <= 0) {
+      toast.error('Please enter a valid number of weeks.')
+      return
+    }
     
-    await suspendProfile(suspendingUser.id, numWeeks)
+    const loadingToast = toast.loading('Setting suspension period...')
+    const result = await suspendProfile(suspendingUser.id, numWeeks)
     
-    const until = new Date()
-    until.setDate(until.getDate() + (numWeeks * 7))
-    
-    setUsers(users.map(u => u.id === suspendingUser.id ? { 
-      ...u, 
-      status: 'suspended', 
-      suspended_until: until.toISOString() 
-    } : u))
-    setSuspendingUser(null)
+    if (result.success) {
+      const until = new Date()
+      until.setDate(until.getDate() + (numWeeks * 7))
+      
+      setUsers(users.map(u => u.id === suspendingUser.id ? { 
+        ...u, 
+        status: 'suspended', 
+        suspended_until: until.toISOString() 
+      } : u))
+      setSuspendingUser(null)
+      toast.success(`User suspended for ${numWeeks} week(s).`, { id: loadingToast })
+    } else {
+      toast.error('Failed to suspend user.', { id: loadingToast })
+    }
   }
 
   const filteredUsers = users.filter(u => {
@@ -205,7 +241,7 @@ export default function UserManagementPage() {
                             className="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors"
                             title="Promote to Admin"
                           >
-                            <ShieldCheck className="w-4.5 h-4.5" />
+                            <ShieldCheck className="w-5 h-5" />
                           </button>
                         )}
                         {user.id !== currentAdmin?.id && (
@@ -214,7 +250,7 @@ export default function UserManagementPage() {
                             className="p-2 text-muted-foreground hover:bg-secondary rounded-lg transition-colors"
                             title="Timed Suspension"
                           >
-                            <MoreHorizontal className="w-4.5 h-4.5" />
+                            <MoreHorizontal className="w-5 h-5" />
                           </button>
                         )}
                       </div>
